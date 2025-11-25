@@ -1,13 +1,266 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DOOM PvP - Online Multiplayer</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="DOOM-style multiplayer FPS arena. Battle online in retro 90s graphics with classic weapons and fast-paced action!" />
+  <meta name="keywords" content="doom, fps, multiplayer, online, retro, shooter, pvp, arena" />
+  <meta name="theme-color" content="#1a0a00" />
+
+  <!-- Open Graph / Social Media -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="DOOM PvP - Online Multiplayer Arena" />
+  <meta property="og:description" content="Classic DOOM-style multiplayer FPS. Join the arena and dominate!" />
+  <meta property="og:image" content="/og-image.png" />
+
+  <title>DOOM PvP - Online Multiplayer Arena</title>
+
+  <!-- Google Fonts - Retro Gaming Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --doom-red: #ff0000;
+      --doom-dark: #1a0a00;
+      --doom-blood: #8b0000;
+      --doom-green: #00ff00;
+      --doom-yellow: #ffff00;
+      --doom-gray: #333333;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Press Start 2P', monospace;
+      background: linear-gradient(135deg, var(--doom-dark) 0%, #2a1a0a 50%, var(--doom-dark) 100%);
+      background-attachment: fixed;
+      color: var(--doom-green);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated scanlines effect */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(0deg,
+          rgba(0, 0, 0, 0.15),
+          rgba(0, 0, 0, 0.15) 1px,
+          transparent 1px,
+          transparent 2px);
+      pointer-events: none;
+      z-index: 9999;
+      animation: scanlines 8s linear infinite;
+    }
+
+    @keyframes scanlines {
+      0% {
+        transform: translateY(0);
+      }
+
+      100% {
+        transform: translateY(4px);
+      }
+    }
+
+    /* CRT screen effect */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
+      pointer-events: none;
+      z-index: 9998;
+    }
+
+    #app {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Loading screen */
+    #loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--doom-dark);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      transition: opacity 0.5s ease-out;
+    }
+
+    #loading-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-logo {
+      font-size: 48px;
+      color: var(--doom-red);
+      text-shadow:
+        0 0 10px var(--doom-red),
+        0 0 20px var(--doom-red),
+        0 0 30px var(--doom-red),
+        4px 4px 0 var(--doom-blood);
+      margin-bottom: 40px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.05);
+      }
+    }
+
+    .loading-bar-container {
+      width: 400px;
+      height: 30px;
+      background: var(--doom-gray);
+      border: 3px solid var(--doom-green);
+      box-shadow:
+        0 0 10px var(--doom-green),
+        inset 0 0 10px rgba(0, 0, 0, 0.5);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .loading-bar {
+      height: 100%;
+      background: linear-gradient(90deg,
+          var(--doom-green) 0%,
+          var(--doom-yellow) 50%,
+          var(--doom-green) 100%);
+      width: 0%;
+      animation: loading 2s ease-in-out infinite;
+      box-shadow: 0 0 20px var(--doom-green);
+    }
+
+    @keyframes loading {
+      0% {
+        width: 0%;
+      }
+
+      50% {
+        width: 70%;
+      }
+
+      100% {
+        width: 100%;
+      }
+    }
+
+    .loading-text {
+      margin-top: 20px;
+      font-size: 14px;
+      color: var(--doom-green);
+      text-shadow: 0 0 5px var(--doom-green);
+      animation: blink 1s step-start infinite;
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    /* Game canvas styling */
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      box-shadow:
+        0 0 50px rgba(255, 0, 0, 0.3),
+        inset 0 0 100px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Player name labels */
+    .player-name-label {
+      font-family: 'Press Start 2P', monospace;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      filter: drop-shadow(0 0 8px currentColor);
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+      .loading-logo {
+        font-size: 32px;
+      }
+
+      .loading-bar-container {
+        width: 80%;
+      }
+
+      .loading-text {
+        font-size: 10px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-logo">DOOM PVP</div>
+    <div class="loading-bar-container">
+      <div class="loading-bar"></div>
+    </div>
+    <div class="loading-text">LOADING ARSENAL...</div>
+  </div>
+
+  <!-- Main App Container -->
+  <div id="app"></div>
+
+  <!-- Main Script -->
+  <script type="module" src="/src/main.ts"></script>
+
+  <!-- Hide loading screen when game is ready -->
+  <script>
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const loadingScreen = document.getElementById('loading-screen');
+          if (loadingScreen) {
+            loadingScreen.classList.add('hidden');
+            setTimeout(() => {
+              loadingScreen.remove();
+            }, 500);
+          }
+        }, 1500);
+      });
+  </script>
+</body>
+
 </html>
