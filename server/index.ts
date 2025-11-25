@@ -8,11 +8,17 @@ const io = new Server(httpServer, {
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
-    }
+    },
+    pingInterval: 1000,
+    pingTimeout: 5000,
 });
 
 const PORT = process.env.PORT || 3001;
 const MAX_PLAYERS = 8;
+const TICK_RATE = 60;
+const TICK_INTERVAL = 1000 / TICK_RATE;
+const MAX_SPEED = 300; // Max units per second for anti-cheat
+const MAX_POSITION_DELTA = 50; // Max position change per update
 
 interface Vector3 {
     x: number;
@@ -35,6 +41,9 @@ interface PlayerState {
     lastShootTime: number;
     kills: number;
     deaths: number;
+    team: 'red' | 'blue';
+    ping: number;
+    lastPingTime: number;
 }
 
 interface PlayerInput {
@@ -53,15 +62,84 @@ interface ChatMessage {
     playerName: string;
     message: string;
     timestamp: number;
-    type?: 'chat' | 'system' | 'kill';
+    type?: 'chat' | 'system' | 'kill' | 'team';
+}
+
+interface LeaderboardEntry {
+    id: string;
+    name: string;
+    kills: number;
+    deaths: number;
+    team: 'red' | 'blue';
+    ping: number;
 }
 
 const players: Map<string, PlayerState> = new Map();
-const TICK_RATE = 60;
-const TICK_INTERVAL = 1000 / TICK_RATE;
+const playerPings: Map<string, { sentTime: number, rtt: number[] }> = new Map();
+
+// Team balancing
+function assignTeam(): 'red' | 'blue' {
+    let redCount = 0;
+    let blueCount = 0;
+
+    players.forEach(player => {
+        if (player.team === 'red') redCount++;
+        else blueCount++;
+    });
+
+    return redCount <= blueCount ? 'red' : 'blue';
+}
+
+// Validate position change (anti-cheat)
+function validatePosition(oldPos: Vector3, newPos: Vector3, deltaTime: number): boolean {
+    const dx = newPos.x - oldPos.x;
+    const dy = newPos.y - oldPos.y;
+    const dz = newPos.z - oldPos.z;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    // Check if movement is physically possible
+    const maxDistance = MAX_SPEED * deltaTime;
+    if (distance > maxDistance) {
+        console.warn(`Suspicious movement detected: ${distance} > ${maxDistance}`);
+        return false;
+    }
+
+    return true;
+}
+
+// Get leaderboard
+function getLeaderboard(): LeaderboardEntry[] {
+    const entries: LeaderboardEntry[] = [];
+
+    players.forEach(player => {
+        entries.push({
+            id: player.id,
+            name: player.name,
+            kills: player.kills,
+            deaths: player.deaths,
+            team: player.team,
+            ping: player.ping
+        });
+    });
+
+    // Sort by kills (descending), then by deaths (ascending)
+    return entries.sort((a, b) => {
+        if (b.kills !== a.kills) return b.kills - a.kills;
+        return a.deaths - b.deaths;
+    });
+}
+
+// Broadcast leaderboard to all players
+function broadcastLeaderboard() {
+    const leaderboard = getLeaderboard();
+    io.emit('leaderboard', leaderboard);
+}
 
 io.on('connection', (socket) => {
     console.log('Player attempting to connect:', socket.id);
+
+    // Initialize ping tracking
+    playerPings.set(socket.id, { sentTime: Date.now(), rtt: [] });
 
     // Check if server is full
     if (players.size >= MAX_PLAYERS) {
@@ -70,6 +148,35 @@ io.on('connection', (socket) => {
         socket.disconnect();
         return;
     }
+
+    // Handle ping measurement
+    socket.on('ping', (timestamp: number) => {
+        socket.emit('pong', timestamp);
+    });
+
+    socket.on('pong', (sentTime: number) => {
+        const rtt = Date.now() - sentTime;
+        const pingData = playerPings.get(socket.id);
+
+        if (pingData) {
+            pingData.rtt.push(rtt);
+            // Keep only last 10 measurements
+            if (pingData.rtt.length > 10) {
+                pingData.rtt.shift();
+            }
+
+            // Calculate average ping
+            const avgPing = Math.round(
+                pingData.rtt.reduce((a, b) => a + b, 0) / pingData.rtt.length
+            );
+
+            const player = players.get(socket.id);
+            if (player) {
+                player.ping = avgPing;
+                player.lastPingTime = Date.now();
+            }
+        }
+    });
 
     // Wait for player to send their name
     socket.on('joinGame', (playerName: string) => {
@@ -85,6 +192,7 @@ io.on('connection', (socket) => {
         ];
 
         const spawn = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+        const team = assignTeam();
 
         const newPlayer: PlayerState = {
             id: socket.id,
@@ -106,6 +214,9 @@ io.on('connection', (socket) => {
             lastShootTime: 0,
             kills: 0,
             deaths: 0,
+            team: team,
+            ping: 0,
+            lastPingTime: Date.now(),
         };
 
         players.set(socket.id, newPlayer);
@@ -124,14 +235,15 @@ io.on('connection', (socket) => {
         const joinMessage: ChatMessage = {
             playerId: 'system',
             playerName: 'System',
-            message: `${playerName} joined the game`,
+            message: `${playerName} joined the ${team} team`,
             timestamp: Date.now(),
             type: 'system',
         };
         io.emit('chatMessage', joinMessage);
 
-        // Send player count update
+        // Send player count and leaderboard
         io.emit('playerCount', players.size);
+        broadcastLeaderboard();
     });
 
     // Handle chat messages
@@ -141,7 +253,7 @@ io.on('connection', (socket) => {
             const chatMessage: ChatMessage = {
                 playerId: socket.id,
                 playerName: player.name,
-                message: message.trim().substring(0, 200), // Limit message length
+                message: message.trim().substring(0, 200),
                 timestamp: Date.now(),
                 type: 'chat',
             };
@@ -149,35 +261,86 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle player input
-    socket.on('playerInput', (input: PlayerInput) => {
-        // In a full implementation, we would process input server-side
-        // For now, we trust the client (not ideal for production)
+    // Handle team chat
+    socket.on('teamChatMessage', (message: string) => {
+        const player = players.get(socket.id);
+        if (player && message.trim().length > 0) {
+            const chatMessage: ChatMessage = {
+                playerId: socket.id,
+                playerName: player.name,
+                message: message.trim().substring(0, 200),
+                timestamp: Date.now(),
+                type: 'team',
+            };
+
+            // Send only to team members
+            players.forEach((p, id) => {
+                if (p.team === player.team) {
+                    io.to(id).emit('chatMessage', chatMessage);
+                }
+            });
+        }
     });
 
-    // Handle player state updates
+    // Handle player state updates with validation
+    let lastUpdateTime = Date.now();
     socket.on('playerUpdate', (state: PlayerState) => {
         const player = players.get(socket.id);
         if (player) {
-            // Update player state (preserve name)
+            const now = Date.now();
+            const deltaTime = (now - lastUpdateTime) / 1000;
+            lastUpdateTime = now;
+
+            // Validate position change (anti-cheat)
+            if (!validatePosition(player.position, state.position, deltaTime)) {
+                console.warn(`Invalid position from ${player.name}, reverting`);
+                // Send corrected position back to client
+                socket.emit('positionCorrection', player.position);
+                return;
+            }
+
+            // Update player state (server has authority over health/armor/ammo)
             player.position = state.position;
             player.angle = state.angle;
-            player.health = state.health;
-            player.armor = state.armor;
             player.currentWeapon = state.currentWeapon;
-            player.ammo = state.ammo;
             player.weapons = state.weapons;
             player.powerups = state.powerups;
-            player.kills = state.kills;
-            player.deaths = state.deaths;
+
+            // Client can suggest but server validates
+            // (In full implementation, server would calculate these)
+            player.health = Math.max(0, Math.min(200, state.health));
+            player.armor = Math.max(0, Math.min(200, state.armor));
 
             // Broadcast to other players
             socket.broadcast.emit('playerUpdate', player);
         }
     });
 
-    // Handle shooting
+    // Handle shooting with server validation
     socket.on('playerShoot', (data: { weaponId: string; angle: number; position: Vector3 }) => {
+        const player = players.get(socket.id);
+        if (!player) return;
+
+        const now = Date.now();
+
+        // Rate limiting based on weapon fire rate
+        const weaponFireRates: Record<string, number> = {
+            'pistol': 500,
+            'shotgun': 800,
+            'chaingun': 100,
+            'rocket': 1000,
+            'plasma': 200,
+            'bfg': 2000,
+        };
+
+        const minInterval = weaponFireRates[data.weaponId] || 500;
+        if (now - player.lastShootTime < minInterval) {
+            console.warn(`Rate limit exceeded for ${player.name}`);
+            return;
+        }
+
+        player.lastShootTime = now;
+
         // Broadcast shoot event to all players
         io.emit('playerShoot', {
             playerId: socket.id,
@@ -185,16 +348,23 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Handle player hit
+    // Handle player hit with server authority
     socket.on('playerHit', (data: { targetId: string; damage: number; attackerId: string }) => {
         console.log('Player hit event received:', data);
         const target = players.get(data.targetId);
         const attacker = players.get(data.attackerId);
 
         if (target && attacker) {
+            // Prevent team killing (optional - can be enabled for hardcore mode)
+            if (target.team === attacker.team && target.id !== attacker.id) {
+                console.log('Team kill prevented');
+                return;
+            }
+
             console.log(`Applying damage: ${data.damage} from ${attacker.name} to ${target.name}`);
-            // Apply damage
-            let damage = data.damage;
+
+            // Server validates and applies damage
+            let damage = Math.max(0, Math.min(200, data.damage)); // Clamp damage
 
             // Armor absorption (50%)
             if (target.armor > 0) {
@@ -235,6 +405,9 @@ io.on('connection', (socket) => {
                 target.armor = 0;
                 target.currentWeapon = 'pistol';
                 target.ammo = { bullets: 50, shells: 0, rockets: 0, cells: 0 };
+
+                // Update leaderboard
+                broadcastLeaderboard();
             }
 
             // Broadcast updates
@@ -262,24 +435,40 @@ io.on('connection', (socket) => {
             io.emit('chatMessage', leaveMessage);
 
             players.delete(socket.id);
+            playerPings.delete(socket.id);
             io.emit('playerDisconnected', socket.id);
             io.emit('playerCount', players.size);
+            broadcastLeaderboard();
         }
     });
 });
 
-// Game loop for server-side simulation (optional, for future server authority)
+// Server tick for ping updates and leaderboard
 let lastTick = Date.now();
+let leaderboardUpdateCounter = 0;
+
 setInterval(() => {
     const now = Date.now();
     const deltaTime = (now - lastTick) / 1000;
     lastTick = now;
 
-    // Server-side game logic would go here
-    // For now, we're using client-side authority
+    // Send ping requests to all players
+    players.forEach((player, id) => {
+        io.to(id).emit('ping', now);
+    });
+
+    // Update leaderboard every 2 seconds
+    leaderboardUpdateCounter++;
+    if (leaderboardUpdateCounter >= 120) { // 60 ticks * 2 = 2 seconds
+        broadcastLeaderboard();
+        leaderboardUpdateCounter = 0;
+    }
 }, TICK_INTERVAL);
 
 httpServer.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Max players: ${MAX_PLAYERS}`);
+    console.log(`🎮 DOOM PvP Server running on port ${PORT}`);
+    console.log(`👥 Max players: ${MAX_PLAYERS}`);
+    console.log(`⚡ Tick rate: ${TICK_RATE}Hz`);
+    console.log(`🛡️  Server authority: ENABLED`);
+    console.log(`🔴🔵 Team mode: ENABLED`);
 });

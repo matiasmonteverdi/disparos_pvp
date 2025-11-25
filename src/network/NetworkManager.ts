@@ -16,7 +16,16 @@ export interface ChatMessage {
     playerName: string;
     message: string;
     timestamp: number;
-    type?: 'chat' | 'system' | 'kill';
+    type?: 'chat' | 'system' | 'kill' | 'team';
+}
+
+export interface LeaderboardEntry {
+    id: string;
+    name: string;
+    kills: number;
+    deaths: number;
+    team: 'red' | 'blue';
+    ping: number;
 }
 
 export class NetworkManager {
@@ -31,28 +40,90 @@ export class NetworkManager {
     private onShootCallback?: (data: any) => void;
     private onChatMessageCallback?: (message: ChatMessage) => void;
     private onPlayerCountCallback?: (count: number) => void;
+    private onLeaderboardCallback?: (leaderboard: LeaderboardEntry[]) => void;
+    private onPingUpdateCallback?: (ping: number) => void;
+
+    private ping: number = 0;
+    private reconnectAttempts: number = 0;
+    private maxReconnectAttempts: number = 5;
+    private reconnectDelay: number = 2000;
+    private reconnecting: boolean = false;
 
     constructor() { }
 
     public connect(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.socket = io(NETWORK_CONFIG.SERVER_URL);
+            this.socket = io(NETWORK_CONFIG.SERVER_URL, {
+                reconnection: true,
+                reconnectionAttempts: this.maxReconnectAttempts,
+                reconnectionDelay: this.reconnectDelay,
+                timeout: 10000,
+            });
 
             this.socket.on('connect', () => {
-                console.log('Connected to server');
+                console.log('✅ Connected to server');
                 this.connected = true;
                 this.playerId = this.socket!.id || '';
+                this.reconnectAttempts = 0;
+                this.reconnecting = false;
                 resolve();
             });
 
             this.socket.on('connect_error', (error) => {
-                console.error('Connection error:', error);
+                console.error('❌ Connection error:', error);
                 reject(error);
+            });
+
+            this.socket.on('reconnect_attempt', (attemptNumber) => {
+                console.log(`🔄 Reconnection attempt ${attemptNumber}/${this.maxReconnectAttempts}`);
+                this.reconnecting = true;
+                this.reconnectAttempts = attemptNumber;
+            });
+
+            this.socket.on('reconnect', (attemptNumber) => {
+                console.log(`✅ Reconnected after ${attemptNumber} attempts`);
+                this.reconnecting = false;
+            });
+
+            this.socket.on('reconnect_failed', () => {
+                console.error('❌ Reconnection failed after max attempts');
+                this.reconnecting = false;
+            });
+
+            this.socket.on('disconnect', (reason) => {
+                console.log('🔌 Disconnected:', reason);
+                this.connected = false;
+
+                if (reason === 'io server disconnect') {
+                    // Server disconnected us, try to reconnect
+                    this.socket?.connect();
+                }
             });
 
             this.socket.on('serverFull', () => {
                 console.error('Server is full');
                 reject(new Error('Server is full (max 8 players)'));
+            });
+
+            // Ping/Pong for latency measurement
+            this.socket.on('ping', (timestamp: number) => {
+                this.socket?.emit('pong', timestamp);
+            });
+
+            this.socket.on('pong', (sentTime: number) => {
+                this.ping = Date.now() - sentTime;
+                if (this.onPingUpdateCallback) {
+                    this.onPingUpdateCallback(this.ping);
+                }
+            });
+
+            // Position correction from server (anti-cheat)
+            this.socket.on('positionCorrection', (position: { x: number; y: number; z: number }) => {
+                console.warn('⚠️ Position corrected by server');
+                if (this.onLocalPlayerUpdateCallback) {
+                    // Server is telling us our position was invalid
+                    this.onLocalPlayerUpdateCallback({ position } as any);
+                }
             });
 
             this.socket.on('currentPlayers', (players: Record<string, PlayerState>) => {
@@ -120,6 +191,12 @@ export class NetworkManager {
                     this.onPlayerCountCallback(count);
                 }
             });
+
+            this.socket.on('leaderboard', (leaderboard: LeaderboardEntry[]) => {
+                if (this.onLeaderboardCallback) {
+                    this.onLeaderboardCallback(leaderboard);
+                }
+            });
         });
     }
 
@@ -163,6 +240,19 @@ export class NetworkManager {
         }
     }
 
+    public sendTeamChatMessage(message: string): void {
+        if (this.socket && this.connected) {
+            this.socket.emit('teamChatMessage', message);
+        }
+    }
+
+    // Ping measurement
+    public measurePing(): void {
+        if (this.socket && this.connected) {
+            this.socket.emit('ping', Date.now());
+        }
+    }
+
     public onPlayerJoin(callback: (player: NetworkPlayer) => void): void {
         this.onPlayerJoinCallback = callback;
     }
@@ -191,6 +281,14 @@ export class NetworkManager {
         this.onPlayerCountCallback = callback;
     }
 
+    public onLeaderboard(callback: (leaderboard: LeaderboardEntry[]) => void): void {
+        this.onLeaderboardCallback = callback;
+    }
+
+    public onPingUpdate(callback: (ping: number) => void): void {
+        this.onPingUpdateCallback = callback;
+    }
+
     public getOtherPlayers(): Map<string, NetworkPlayer> {
         return this.otherPlayers;
     }
@@ -201,6 +299,14 @@ export class NetworkManager {
 
     public isConnected(): boolean {
         return this.connected;
+    }
+
+    public isReconnecting(): boolean {
+        return this.reconnecting;
+    }
+
+    public getPing(): number {
+        return this.ping;
     }
 
     public disconnect(): void {

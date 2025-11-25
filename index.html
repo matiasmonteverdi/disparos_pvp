@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description"
     content="DOOM-style multiplayer FPS arena. Battle online in retro 90s graphics with classic weapons and fast-paced action!" />
@@ -249,17 +249,17 @@
 
   <!-- Hide loading screen when game is ready -->
   <script>
-      window.addEventListener('load', () => {
-        setTimeout(() => {
-          const loadingScreen = document.getElementById('loading-screen');
-          if (loadingScreen) {
-            loadingScreen.classList.add('hidden');
-            setTimeout(() => {
-              loadingScreen.remove();
-            }, 500);
-          }
-        }, 1500);
-      });
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+          loadingScreen.classList.add('hidden');
+          setTimeout(() => {
+            loadingScreen.remove();
+          }, 500);
+        }
+      }, 1500);
+    });
   </script>
 </body>
 

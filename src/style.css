@@ -853,3 +853,315 @@ body {
 #hud-bottom.damage {
   animation: damageFlash 0.2s;
 }
+
+/* ============================================
+   PING INDICATOR
+   ============================================ */
+
+#ping-indicator {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 15px;
+  border: 2px solid var(--doom-green);
+  box-shadow:
+    0 0 10px rgba(0, 255, 0, 0.3),
+    inset 0 0 10px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 15;
+}
+
+#ping-value {
+  color: var(--doom-green);
+  font-size: 14px;
+  text-shadow: 0 0 5px var(--doom-green);
+  min-width: 40px;
+  text-align: right;
+}
+
+#ping-value.high {
+  color: var(--doom-yellow);
+  text-shadow: 0 0 5px var(--doom-yellow);
+}
+
+#ping-value.critical {
+  color: var(--doom-red);
+  text-shadow: 0 0 5px var(--doom-red);
+  animation: pulse-red 0.5s infinite;
+}
+
+/* ============================================
+   LEADERBOARD
+   ============================================ */
+
+#leaderboard {
+  position: absolute;
+  top: 70px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 3px solid var(--doom-brown);
+  box-shadow:
+    0 0 20px rgba(0, 0, 0, 0.8),
+    inset 0 0 20px rgba(0, 0, 0, 0.5);
+  padding: 15px;
+  min-width: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+  display: none;
+  z-index: 15;
+}
+
+#leaderboard.visible {
+  display: block;
+}
+
+#leaderboard h2 {
+  font-size: 16px;
+  color: var(--doom-yellow);
+  text-align: center;
+  margin-bottom: 15px;
+  text-shadow:
+    2px 2px 0 var(--doom-black),
+    0 0 10px var(--doom-yellow);
+  letter-spacing: 2px;
+}
+
+.leaderboard-entry {
+  display: grid;
+  grid-template-columns: 30px 1fr 60px 60px 50px;
+  gap: 10px;
+  padding: 8px;
+  margin-bottom: 5px;
+  background: rgba(0, 0, 0, 0.5);
+  border-left: 3px solid transparent;
+  font-size: 11px;
+  align-items: center;
+}
+
+.leaderboard-entry.red-team {
+  border-left-color: var(--doom-red);
+  background: rgba(255, 0, 0, 0.1);
+}
+
+.leaderboard-entry.blue-team {
+  border-left-color: var(--doom-blue);
+  background: rgba(0, 0, 255, 0.1);
+}
+
+.leaderboard-entry.current-player {
+  background: rgba(0, 255, 0, 0.2);
+  border: 2px solid var(--doom-green);
+  font-weight: bold;
+}
+
+.leaderboard-rank {
+  color: var(--doom-yellow);
+  font-weight: bold;
+  text-align: center;
+}
+
+.leaderboard-name {
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-kills {
+  color: var(--doom-red);
+  text-align: center;
+}
+
+.leaderboard-deaths {
+  color: var(--doom-gray);
+  text-align: center;
+}
+
+.leaderboard-ping {
+  color: var(--doom-green);
+  text-align: right;
+  font-size: 9px;
+}
+
+.leaderboard-ping.high {
+  color: var(--doom-yellow);
+}
+
+.leaderboard-ping.critical {
+  color: var(--doom-red);
+}
+
+/* Leaderboard scrollbar */
+#leaderboard::-webkit-scrollbar {
+  width: 8px;
+}
+
+#leaderboard::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+#leaderboard::-webkit-scrollbar-thumb {
+  background: var(--doom-brown);
+  border: 1px solid var(--doom-dark-gray);
+}
+
+#leaderboard::-webkit-scrollbar-thumb:hover {
+  background: var(--doom-yellow);
+}
+
+/* ============================================
+   RECONNECTION OVERLAY
+   ============================================ */
+
+#reconnect-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+#reconnect-overlay.visible {
+  display: flex;
+}
+
+.reconnect-message {
+  font-size: 24px;
+  color: var(--doom-yellow);
+  text-shadow:
+    2px 2px 0 var(--doom-black),
+    0 0 20px var(--doom-yellow);
+  margin-bottom: 30px;
+  animation: pulse 1.5s infinite;
+}
+
+.reconnect-spinner {
+  width: 60px;
+  height: 60px;
+  border: 5px solid var(--doom-dark-gray);
+  border-top: 5px solid var(--doom-green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.reconnect-attempts {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--doom-gray);
+  text-shadow: 1px 1px 0 var(--doom-black);
+}
+
+/* ============================================
+   TEAM INDICATORS
+   ============================================ */
+
+.player-name-label.red-team {
+  color: var(--doom-red) !important;
+  text-shadow:
+    2px 2px 0 var(--doom-black),
+    0 0 10px var(--doom-red) !important;
+}
+
+.player-name-label.blue-team {
+  color: var(--doom-blue) !important;
+  text-shadow:
+    2px 2px 0 var(--doom-black),
+    0 0 10px var(--doom-blue) !important;
+}
+
+/* Team chat messages */
+.chat-message.team-message {
+  border-left-color: var(--doom-blue);
+  background: rgba(0, 0, 255, 0.15);
+  font-style: italic;
+}
+
+.chat-message.team-message .chat-name {
+  color: var(--doom-blue);
+  text-shadow: 0 0 5px var(--doom-blue);
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS FOR NEW ELEMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  #ping-indicator {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+
+  #ping-value {
+    font-size: 12px;
+    min-width: 30px;
+  }
+
+  #leaderboard {
+    min-width: 250px;
+    font-size: 10px;
+    right: 10px;
+    top: 60px;
+  }
+
+  #leaderboard h2 {
+    font-size: 14px;
+  }
+
+  .leaderboard-entry {
+    grid-template-columns: 25px 1fr 50px 50px 40px;
+    gap: 5px;
+    font-size: 9px;
+  }
+
+  .reconnect-message {
+    font-size: 18px;
+  }
+
+  .reconnect-spinner {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ============================================
+   TOGGLE KEY HINT
+   ============================================ */
+
+#leaderboard-hint {
+  position: absolute;
+  top: 70px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 8px 12px;
+  border: 2px solid var(--doom-dark-gray);
+  font-size: 10px;
+  color: var(--doom-gray);
+  text-shadow: 1px 1px 0 var(--doom-black);
+  pointer-events: none;
+  z-index: 14;
+}
+
+#leaderboard.visible+#leaderboard-hint {
+  display: none;
+}

@@ -31,6 +31,9 @@ export interface PlayerState {
     lastShootTime: number;
     kills: number;
     deaths: number;
+    team?: 'red' | 'blue';
+    ping?: number;
+    lastPingTime?: number;
 }
 
 export class Player {
