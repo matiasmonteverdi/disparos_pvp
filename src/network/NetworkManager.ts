@@ -7,6 +7,13 @@ export interface NetworkPlayer {
     state: PlayerState;
 }
 
+export interface ChatMessage {
+    playerId: string;
+    playerName: string;
+    message: string;
+    timestamp: number;
+}
+
 export class NetworkManager {
     private socket: Socket | null = null;
     private connected: boolean = false;
@@ -16,6 +23,8 @@ export class NetworkManager {
     private onPlayerLeaveCallback?: (playerId: string) => void;
     private onPlayerUpdateCallback?: (player: NetworkPlayer) => void;
     private onShootCallback?: (data: any) => void;
+    private onChatMessageCallback?: (message: ChatMessage) => void;
+    private onPlayerCountCallback?: (count: number) => void;
 
     constructor() { }
 
@@ -33,6 +42,11 @@ export class NetworkManager {
             this.socket.on('connect_error', (error) => {
                 console.error('Connection error:', error);
                 reject(error);
+            });
+
+            this.socket.on('serverFull', () => {
+                console.error('Server is full');
+                reject(new Error('Server is full (max 8 players)'));
             });
 
             this.socket.on('currentPlayers', (players: Record<string, PlayerState>) => {
@@ -79,7 +93,25 @@ export class NetworkManager {
                     this.onShootCallback(data);
                 }
             });
+
+            this.socket.on('chatMessage', (message: ChatMessage) => {
+                if (this.onChatMessageCallback) {
+                    this.onChatMessageCallback(message);
+                }
+            });
+
+            this.socket.on('playerCount', (count: number) => {
+                if (this.onPlayerCountCallback) {
+                    this.onPlayerCountCallback(count);
+                }
+            });
         });
+    }
+
+    public joinGame(playerName: string): void {
+        if (this.socket && this.connected) {
+            this.socket.emit('joinGame', playerName);
+        }
     }
 
     public sendInput(input: PlayerInput): void {
@@ -100,6 +132,12 @@ export class NetworkManager {
         }
     }
 
+    public sendChatMessage(message: string): void {
+        if (this.socket && this.connected) {
+            this.socket.emit('chatMessage', message);
+        }
+    }
+
     public onPlayerJoin(callback: (player: NetworkPlayer) => void): void {
         this.onPlayerJoinCallback = callback;
     }
@@ -114,6 +152,14 @@ export class NetworkManager {
 
     public onShoot(callback: (data: any) => void): void {
         this.onShootCallback = callback;
+    }
+
+    public onChatMessage(callback: (message: ChatMessage) => void): void {
+        this.onChatMessageCallback = callback;
+    }
+
+    public onPlayerCount(callback: (count: number) => void): void {
+        this.onPlayerCountCallback = callback;
     }
 
     public getOtherPlayers(): Map<string, NetworkPlayer> {

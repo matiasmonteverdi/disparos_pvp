@@ -14,6 +14,7 @@ export interface PlayerInput {
 
 export interface PlayerState {
     id: string;
+    name: string;
     position: THREE.Vector3;
     angle: number;
     velocity: THREE.Vector3;
@@ -36,9 +37,10 @@ export class Player {
     public state: PlayerState;
     private input: PlayerInput;
 
-    constructor(id: string, spawnX: number, spawnZ: number) {
+    constructor(id: string, name: string, spawnX: number, spawnZ: number) {
         this.state = {
             id,
+            name,
             position: new THREE.Vector3(spawnX, PLAYER_CONFIG.HEIGHT, spawnZ),
             angle: 0,
             velocity: new THREE.Vector3(0, 0, 0),

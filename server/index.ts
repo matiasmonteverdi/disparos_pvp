@@ -12,6 +12,7 @@ const io = new Server(httpServer, {
 });
 
 const PORT = process.env.PORT || 3001;
+const MAX_PLAYERS = 8;
 
 interface Vector3 {
     x: number;
@@ -21,6 +22,7 @@ interface Vector3 {
 
 interface PlayerState {
     id: string;
+    name: string;
     position: Vector3;
     angle: number;
     velocity: Vector3;
@@ -46,56 +48,103 @@ interface PlayerInput {
     weaponSlot: number | null;
 }
 
+interface ChatMessage {
+    playerId: string;
+    playerName: string;
+    message: string;
+    timestamp: number;
+}
+
 const players: Map<string, PlayerState> = new Map();
 const TICK_RATE = 60;
 const TICK_INTERVAL = 1000 / TICK_RATE;
 
 io.on('connection', (socket) => {
-    console.log('Player connected:', socket.id);
+    console.log('Player attempting to connect:', socket.id);
 
-    // Initialize player with spawn position
-    const spawnPoints = [
-        { x: 3 * 64 + 32, z: 3 * 64 + 32 },
-        { x: 16 * 64 + 32, z: 3 * 64 + 32 },
-        { x: 3 * 64 + 32, z: 16 * 64 + 32 },
-        { x: 16 * 64 + 32, z: 16 * 64 + 32 },
-        { x: 10 * 64 + 32, z: 10 * 64 + 32 },
-    ];
+    // Check if server is full
+    if (players.size >= MAX_PLAYERS) {
+        console.log('Server full, rejecting connection:', socket.id);
+        socket.emit('serverFull');
+        socket.disconnect();
+        return;
+    }
 
-    const spawn = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+    // Wait for player to send their name
+    socket.on('joinGame', (playerName: string) => {
+        console.log('Player joined:', socket.id, 'Name:', playerName);
 
-    const newPlayer: PlayerState = {
-        id: socket.id,
-        position: { x: spawn.x, y: 32, z: spawn.z },
-        angle: 0,
-        velocity: { x: 0, y: 0, z: 0 },
-        health: 100,
-        armor: 0,
-        currentWeapon: 'pistol',
-        ammo: {
-            bullets: 50,
-            shells: 0,
-            rockets: 0,
-            cells: 0,
-        },
-        weapons: ['fists', 'pistol'],
-        powerups: {},
-        lastShootTime: 0,
-        kills: 0,
-        deaths: 0,
-    };
+        // Initialize player with spawn position
+        const spawnPoints = [
+            { x: 3 * 64 + 32, z: 3 * 64 + 32 },
+            { x: 16 * 64 + 32, z: 3 * 64 + 32 },
+            { x: 3 * 64 + 32, z: 16 * 64 + 32 },
+            { x: 16 * 64 + 32, z: 16 * 64 + 32 },
+            { x: 10 * 64 + 32, z: 10 * 64 + 32 },
+        ];
 
-    players.set(socket.id, newPlayer);
+        const spawn = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
 
-    // Send current players to new player
-    const currentPlayers: Record<string, PlayerState> = {};
-    players.forEach((player, id) => {
-        currentPlayers[id] = player;
+        const newPlayer: PlayerState = {
+            id: socket.id,
+            name: playerName || 'Player',
+            position: { x: spawn.x, y: 32, z: spawn.z },
+            angle: 0,
+            velocity: { x: 0, y: 0, z: 0 },
+            health: 100,
+            armor: 0,
+            currentWeapon: 'pistol',
+            ammo: {
+                bullets: 50,
+                shells: 0,
+                rockets: 0,
+                cells: 0,
+            },
+            weapons: ['fists', 'pistol'],
+            powerups: {},
+            lastShootTime: 0,
+            kills: 0,
+            deaths: 0,
+        };
+
+        players.set(socket.id, newPlayer);
+
+        // Send current players to new player
+        const currentPlayers: Record<string, PlayerState> = {};
+        players.forEach((player, id) => {
+            currentPlayers[id] = player;
+        });
+        socket.emit('currentPlayers', currentPlayers);
+
+        // Broadcast new player to all other players
+        socket.broadcast.emit('newPlayer', newPlayer);
+
+        // Send join message to all players
+        const joinMessage: ChatMessage = {
+            playerId: 'system',
+            playerName: 'System',
+            message: `${playerName} joined the game`,
+            timestamp: Date.now(),
+        };
+        io.emit('chatMessage', joinMessage);
+
+        // Send player count update
+        io.emit('playerCount', players.size);
     });
-    socket.emit('currentPlayers', currentPlayers);
 
-    // Broadcast new player to all other players
-    socket.broadcast.emit('newPlayer', newPlayer);
+    // Handle chat messages
+    socket.on('chatMessage', (message: string) => {
+        const player = players.get(socket.id);
+        if (player && message.trim().length > 0) {
+            const chatMessage: ChatMessage = {
+                playerId: socket.id,
+                playerName: player.name,
+                message: message.trim().substring(0, 200), // Limit message length
+                timestamp: Date.now(),
+            };
+            io.emit('chatMessage', chatMessage);
+        }
+    });
 
     // Handle player input
     socket.on('playerInput', (input: PlayerInput) => {
@@ -107,7 +156,7 @@ io.on('connection', (socket) => {
     socket.on('playerUpdate', (state: PlayerState) => {
         const player = players.get(socket.id);
         if (player) {
-            // Update player state
+            // Update player state (preserve name)
             player.position = state.position;
             player.angle = state.angle;
             player.health = state.health;
@@ -135,9 +184,23 @@ io.on('connection', (socket) => {
 
     // Handle disconnect
     socket.on('disconnect', () => {
-        console.log('Player disconnected:', socket.id);
-        players.delete(socket.id);
-        io.emit('playerDisconnected', socket.id);
+        const player = players.get(socket.id);
+        if (player) {
+            console.log('Player disconnected:', socket.id, 'Name:', player.name);
+
+            // Send leave message
+            const leaveMessage: ChatMessage = {
+                playerId: 'system',
+                playerName: 'System',
+                message: `${player.name} left the game`,
+                timestamp: Date.now(),
+            };
+            io.emit('chatMessage', leaveMessage);
+
+            players.delete(socket.id);
+            io.emit('playerDisconnected', socket.id);
+            io.emit('playerCount', players.size);
+        }
     });
 });
 
@@ -154,4 +217,5 @@ setInterval(() => {
 
 httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log(`Max players: ${MAX_PLAYERS}`);
 });

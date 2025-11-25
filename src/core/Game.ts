@@ -1,7 +1,7 @@
 import { Player } from '../entities/Player';
 import { Renderer } from '../renderer/Renderer';
 import { InputManager } from '../input/InputManager';
-import { NetworkManager, type NetworkPlayer } from '../network/NetworkManager';
+import { NetworkManager, type NetworkPlayer, type ChatMessage } from '../network/NetworkManager';
 import { DM_MAP_1, getCollisionMap, getRandomSpawnPoint } from '../world/Map';
 import { WEAPONS, PLAYER_CONFIG } from '../config/constants';
 import * as THREE from 'three';
@@ -15,8 +15,10 @@ export class Game {
     private lastTime: number = 0;
     private running: boolean = false;
     private collisionMap: boolean[][] = [];
+    private playerName: string;
 
-    constructor(canvas: HTMLCanvasElement) {
+    constructor(canvas: HTMLCanvasElement, playerName: string) {
+        this.playerName = playerName;
         this.renderer = new Renderer(canvas);
         this.inputManager = new InputManager(canvas);
         this.networkManager = new NetworkManager();
@@ -36,8 +38,11 @@ export class Game {
             console.log('Connected to server');
         } catch (error) {
             console.error('Failed to connect to server:', error);
-            return;
+            throw error; // Re-throw to handle in main.ts
         }
+
+        // Join game with player name
+        this.networkManager.joinGame(this.playerName);
 
         // Load map
         this.renderer.loadMap(DM_MAP_1);
@@ -45,7 +50,12 @@ export class Game {
 
         // Create local player
         const spawn = getRandomSpawnPoint(DM_MAP_1);
-        this.localPlayer = new Player(this.networkManager.getPlayerId(), spawn.x, spawn.z);
+        this.localPlayer = new Player(
+            this.networkManager.getPlayerId(),
+            this.playerName,
+            spawn.x,
+            spawn.z
+        );
 
         // Start game loop
         this.running = true;
@@ -132,7 +142,7 @@ export class Game {
     }
 
     private onPlayerJoin(player: NetworkPlayer): void {
-        console.log('Player joined:', player.id);
+        console.log('Player joined:', player.id, player.state.name);
 
         // Create mesh for other player
         const geometry = new THREE.CapsuleGeometry(
@@ -191,6 +201,18 @@ export class Game {
                 );
             }
         });
+    }
+
+    public sendChatMessage(message: string): void {
+        this.networkManager.sendChatMessage(message);
+    }
+
+    public onChatMessage(callback: (message: ChatMessage) => void): void {
+        this.networkManager.onChatMessage(callback);
+    }
+
+    public onPlayerCount(callback: (count: number) => void): void {
+        this.networkManager.onPlayerCount(callback);
     }
 
     public getLocalPlayer(): Player | null {

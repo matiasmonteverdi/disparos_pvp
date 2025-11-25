@@ -10,7 +10,6 @@ body {
   font-family: 'Press Start 2P', monospace;
   background: #000;
   overflow: hidden;
-  cursor: none;
 }
 
 #app {
@@ -30,6 +29,7 @@ body {
   height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  filter: contrast(1.1) brightness(1.05);
 }
 
 /* HUD Styles - DOOM Inspired */
@@ -58,7 +58,8 @@ body {
   text-shadow: 2px 2px 0 #000;
 }
 
-#hud-left, #hud-right {
+#hud-left,
+#hud-right {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -103,9 +104,26 @@ body {
   text-transform: uppercase;
 }
 
-#health-display, #armor-display, #ammo-display, #score-display {
+#health-display,
+#armor-display,
+#ammo-display,
+#score-display {
   display: flex;
   align-items: center;
+}
+
+/* Player Count */
+#player-count {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+#player-count-value {
+  color: #0f0;
 }
 
 /* Crosshair */
@@ -143,8 +161,81 @@ body {
   transform: translateX(-50%);
 }
 
-/* Start Menu */
-#start-menu {
+/* Chat System */
+#chat-container {
+  position: absolute;
+  bottom: 100px;
+  left: 20px;
+  width: 400px;
+  max-width: 90%;
+  z-index: 20;
+  pointer-events: none;
+}
+
+#chat-messages {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px;
+  border-radius: 5px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.chat-message {
+  margin-bottom: 5px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.chat-name {
+  color: #0f0;
+  font-weight: bold;
+}
+
+.chat-text {
+  color: #fff;
+}
+
+.system-message {
+  color: #ff0;
+  font-style: italic;
+}
+
+#chat-input {
+  width: 100%;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 2px solid #0f0;
+  color: #0f0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  outline: none;
+  display: none;
+  pointer-events: auto;
+}
+
+#chat-input:focus {
+  border-color: #0ff;
+  box-shadow: 0 0 10px #0f0;
+}
+
+#chat-hint {
+  font-size: 8px;
+  color: #888;
+  margin-top: 5px;
+  text-shadow: 1px 1px 0 #000;
+  display: none;
+}
+
+.chat-open #chat-input,
+.chat-open #chat-hint {
+  display: block;
+}
+
+/* Name Input Screen */
+#name-screen {
   position: absolute;
   top: 0;
   left: 0;
@@ -156,49 +247,92 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 100;
-  cursor: pointer;
-  transition: opacity 0.3s;
+  cursor: default;
 }
 
-#start-menu:hover {
-  background: linear-gradient(135deg, #2a0000 0%, #0a0a0a 100%);
-}
-
-#start-menu h1 {
+#name-screen h1 {
   font-size: 48px;
   color: #f00;
   text-shadow: 4px 4px 0 #000, 0 0 20px #f00;
-  margin-bottom: 20px;
+  margin-bottom: 40px;
   animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     text-shadow: 4px 4px 0 #000, 0 0 20px #f00;
   }
+
   50% {
     text-shadow: 4px 4px 0 #000, 0 0 40px #f00, 0 0 60px #f00;
   }
 }
 
-#start-menu p {
-  font-size: 16px;
-  color: #fff;
-  text-shadow: 2px 2px 0 #000;
-  animation: blink 1.5s infinite;
+#name-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 40px;
 }
 
-@keyframes blink {
-  0%, 49% {
-    opacity: 1;
-  }
-  50%, 100% {
-    opacity: 0;
-  }
+#name-form label {
+  font-size: 14px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+#player-name {
+  width: 300px;
+  padding: 15px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 3px solid #0f0;
+  color: #0f0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+  transition: all 0.3s;
+}
+
+#player-name:focus {
+  border-color: #0ff;
+  box-shadow: 0 0 20px #0f0;
+}
+
+#join-button {
+  padding: 15px 40px;
+  background: linear-gradient(135deg, #f00 0%, #a00 100%);
+  border: 3px solid #fff;
+  color: #fff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  cursor: pointer;
+  text-shadow: 2px 2px 0 #000;
+  transition: all 0.3s;
+}
+
+#join-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ff0 0%, #f00 100%);
+  box-shadow: 0 0 20px #f00;
+  transform: scale(1.05);
+}
+
+#join-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#server-status {
+  font-size: 10px;
+  min-height: 20px;
+  text-shadow: 1px 1px 0 #000;
 }
 
 #controls-info {
-  margin-top: 40px;
+  margin-top: 20px;
   text-align: left;
   color: #888;
 }
@@ -220,16 +354,14 @@ body {
   margin-bottom: 5px;
 }
 
-/* Retro CRT Effect (Optional) */
-#game-canvas {
-  filter: contrast(1.1) brightness(1.05);
-}
-
 /* Low health warning */
 @keyframes redFlash {
-  0%, 100% {
+
+  0%,
+  100% {
     background: transparent;
   }
+
   50% {
     background: rgba(255, 0, 0, 0.2);
   }
@@ -237,4 +369,22 @@ body {
 
 .low-health #hud {
   animation: redFlash 1s infinite;
+}
+
+/* Scrollbar styling for chat */
+#chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+#chat-messages::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+#chat-messages::-webkit-scrollbar-thumb {
+  background: #0f0;
+  border-radius: 4px;
+}
+
+#chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #0ff;
 }
