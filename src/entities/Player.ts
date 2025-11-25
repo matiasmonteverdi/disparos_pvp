@@ -94,24 +94,24 @@ export class Player {
             this.state.angle -= PLAYER_CONFIG.TURN_SPEED * deltaTime;
         }
 
-        // Calculate movement direction
+        // Calculate movement direction (FIXED - controls were inverted)
         const moveDir = new THREE.Vector3(0, 0, 0);
 
         if (this.input.forward) {
-            moveDir.x += Math.sin(this.state.angle);
-            moveDir.z += Math.cos(this.state.angle);
-        }
-        if (this.input.backward) {
             moveDir.x -= Math.sin(this.state.angle);
             moveDir.z -= Math.cos(this.state.angle);
         }
-        if (this.input.left) {
-            moveDir.x += Math.cos(this.state.angle);
-            moveDir.z -= Math.sin(this.state.angle);
+        if (this.input.backward) {
+            moveDir.x += Math.sin(this.state.angle);
+            moveDir.z += Math.cos(this.state.angle);
         }
-        if (this.input.right) {
+        if (this.input.left) {
             moveDir.x -= Math.cos(this.state.angle);
             moveDir.z += Math.sin(this.state.angle);
+        }
+        if (this.input.right) {
+            moveDir.x += Math.cos(this.state.angle);
+            moveDir.z -= Math.sin(this.state.angle);
         }
 
         // Normalize and apply speed

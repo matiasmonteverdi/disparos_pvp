@@ -182,6 +182,60 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Handle player hit
+    socket.on('playerHit', (data: { targetId: string; damage: number; attackerId: string }) => {
+        const target = players.get(data.targetId);
+        const attacker = players.get(data.attackerId);
+
+        if (target && attacker) {
+            // Apply damage
+            let damage = data.damage;
+
+            // Armor absorption (50%)
+            if (target.armor > 0) {
+                const armorDamage = Math.min(target.armor, Math.ceil(damage * 0.5));
+                target.armor -= armorDamage;
+                damage -= armorDamage;
+            }
+
+            target.health -= damage;
+
+            // Check for death
+            if (target.health <= 0) {
+                target.deaths++;
+                attacker.kills++;
+
+                // Broadcast kill message
+                const killMessage: ChatMessage = {
+                    playerId: 'system',
+                    playerName: 'System',
+                    message: `${target.name} was fragged by ${attacker.name}`,
+                    timestamp: Date.now(),
+                };
+                io.emit('chatMessage', killMessage);
+
+                // Respawn target
+                const spawnPoints = [
+                    { x: 3 * 64 + 32, z: 3 * 64 + 32 },
+                    { x: 16 * 64 + 32, z: 3 * 64 + 32 },
+                    { x: 3 * 64 + 32, z: 16 * 64 + 32 },
+                    { x: 16 * 64 + 32, z: 16 * 64 + 32 },
+                    { x: 10 * 64 + 32, z: 10 * 64 + 32 },
+                ];
+                const spawn = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+                target.position = { x: spawn.x, y: 32, z: spawn.z };
+                target.health = 100;
+                target.armor = 0;
+                target.currentWeapon = 'pistol';
+                target.ammo = { bullets: 50, shells: 0, rockets: 0, cells: 0 };
+            }
+
+            // Broadcast updates
+            io.emit('playerUpdate', target);
+            io.emit('playerUpdate', attacker);
+        }
+    });
+
     // Handle disconnect
     socket.on('disconnect', () => {
         const player = players.get(socket.id);

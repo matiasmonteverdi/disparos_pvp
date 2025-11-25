@@ -27,6 +27,21 @@ export class Game {
         this.networkManager.onPlayerJoin((player) => this.onPlayerJoin(player));
         this.networkManager.onPlayerLeave((playerId) => this.onPlayerLeave(playerId));
         this.networkManager.onPlayerUpdate((player) => this.onPlayerUpdate(player));
+        this.networkManager.onLocalPlayerUpdate((state) => {
+            if (this.localPlayer) {
+                this.localPlayer.state.health = state.health;
+                this.localPlayer.state.armor = state.armor;
+                this.localPlayer.state.kills = state.kills;
+                this.localPlayer.state.deaths = state.deaths;
+                this.localPlayer.state.ammo = state.ammo;
+
+                // Handle respawn/teleport
+                const serverPos = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
+                if (serverPos.distanceTo(this.localPlayer.state.position) > 100) {
+                    this.localPlayer.state.position.copy(serverPos);
+                }
+            }
+        });
     }
 
     public async start(): Promise<void> {
@@ -111,7 +126,10 @@ export class Game {
                         z: this.localPlayer.state.position.z,
                     }
                 );
-                // TODO: Handle hitscan/projectile logic
+                // Handle hitscan/projectile logic
+                if (weapon.type === 'hitscan' || weapon.type === 'melee') {
+                    this.checkHitscan(weapon);
+                }
             }
         }
 
@@ -124,6 +142,59 @@ export class Game {
 
         // Update other players
         this.updateOtherPlayers();
+    }
+
+    private checkHitscan(weapon: any): void {
+        if (!this.localPlayer) return;
+
+        const shots = weapon.pellets || 1;
+        const damagePerShot = weapon.damage;
+
+        for (let i = 0; i < shots; i++) {
+            const raycaster = new THREE.Raycaster();
+            const direction = new THREE.Vector3(
+                Math.sin(this.localPlayer.state.angle),
+                0,
+                Math.cos(this.localPlayer.state.angle)
+            );
+
+            if (weapon.spread) {
+                direction.x += (Math.random() - 0.5) * weapon.spread;
+                direction.z += (Math.random() - 0.5) * weapon.spread;
+                direction.normalize();
+            }
+
+            raycaster.set(
+                new THREE.Vector3(
+                    this.localPlayer.state.position.x,
+                    this.localPlayer.state.position.y,
+                    this.localPlayer.state.position.z
+                ),
+                direction
+            );
+            raycaster.far = weapon.range;
+
+            const meshes: THREE.Object3D[] = [];
+            this.otherPlayerMeshes.forEach((mesh) => meshes.push(mesh));
+
+            const intersects = raycaster.intersectObjects(meshes);
+
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object;
+                let targetId: string | null = null;
+
+                for (const [id, mesh] of this.otherPlayerMeshes.entries()) {
+                    if (mesh === hitMesh) {
+                        targetId = id;
+                        break;
+                    }
+                }
+
+                if (targetId) {
+                    this.networkManager.sendHit(targetId, damagePerShot);
+                }
+            }
+        }
     }
 
     private render(): void {

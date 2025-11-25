@@ -21,7 +21,7 @@ export const PLAYER_CONFIG = {
     SPAWN_ARMOR: 0,
 };
 
-// Weapon Configuration
+// Weapon Configuration - 9 WEAPONS TOTAL
 export const WEAPONS = {
     FISTS: {
         id: 'fists',
@@ -31,6 +31,16 @@ export const WEAPONS = {
         ammoType: null,
         ammoPerShot: 0,
         range: 64,
+        type: 'melee',
+    },
+    CHAINSAW: {
+        id: 'chainsaw',
+        name: 'Chainsaw',
+        damage: 20,
+        fireRate: 100, // Very fast
+        ammoType: null, // No ammo needed
+        ammoPerShot: 0,
+        range: 80,
         type: 'melee',
     },
     PISTOL: {
@@ -55,6 +65,18 @@ export const WEAPONS = {
         range: 1024,
         type: 'hitscan',
         spread: 0.15,
+    },
+    SUPER_SHOTGUN: {
+        id: 'supershotgun',
+        name: 'Super Shotgun',
+        damage: 12, // Per pellet
+        pellets: 20,
+        fireRate: 1200,
+        ammoType: 'shells',
+        ammoPerShot: 2,
+        range: 1024,
+        type: 'hitscan',
+        spread: 0.25,
     },
     CHAINGUN: {
         id: 'chaingun',

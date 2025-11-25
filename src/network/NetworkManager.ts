@@ -22,6 +22,7 @@ export class NetworkManager {
     private onPlayerJoinCallback?: (player: NetworkPlayer) => void;
     private onPlayerLeaveCallback?: (playerId: string) => void;
     private onPlayerUpdateCallback?: (player: NetworkPlayer) => void;
+    private onLocalPlayerUpdateCallback?: (state: PlayerState) => void;
     private onShootCallback?: (data: any) => void;
     private onChatMessageCallback?: (message: ChatMessage) => void;
     private onPlayerCountCallback?: (count: number) => void;
@@ -77,7 +78,11 @@ export class NetworkManager {
             });
 
             this.socket.on('playerUpdate', (playerState: PlayerState) => {
-                if (playerState.id !== this.playerId) {
+                if (playerState.id === this.playerId) {
+                    if (this.onLocalPlayerUpdateCallback) {
+                        this.onLocalPlayerUpdateCallback(playerState);
+                    }
+                } else {
                     const player = this.otherPlayers.get(playerState.id);
                     if (player) {
                         player.state = playerState;
@@ -132,6 +137,16 @@ export class NetworkManager {
         }
     }
 
+    public sendHit(targetId: string, damage: number): void {
+        if (this.socket && this.connected) {
+            this.socket.emit('playerHit', {
+                targetId,
+                damage,
+                attackerId: this.playerId
+            });
+        }
+    }
+
     public sendChatMessage(message: string): void {
         if (this.socket && this.connected) {
             this.socket.emit('chatMessage', message);
@@ -148,6 +163,10 @@ export class NetworkManager {
 
     public onPlayerUpdate(callback: (player: NetworkPlayer) => void): void {
         this.onPlayerUpdateCallback = callback;
+    }
+
+    public onLocalPlayerUpdate(callback: (state: PlayerState) => void): void {
+        this.onLocalPlayerUpdateCallback = callback;
     }
 
     public onShoot(callback: (data: any) => void): void {
