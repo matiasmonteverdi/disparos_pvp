@@ -187,10 +187,12 @@ io.on('connection', (socket) => {
 
     // Handle player hit
     socket.on('playerHit', (data: { targetId: string; damage: number; attackerId: string }) => {
+        console.log('Player hit event received:', data);
         const target = players.get(data.targetId);
         const attacker = players.get(data.attackerId);
 
         if (target && attacker) {
+            console.log(`Applying damage: ${data.damage} from ${attacker.name} to ${target.name}`);
             // Apply damage
             let damage = data.damage;
 
@@ -202,6 +204,7 @@ io.on('connection', (socket) => {
             }
 
             target.health -= damage;
+            console.log(`New health for ${target.name}: ${target.health}`);
 
             // Check for death
             if (target.health <= 0) {
@@ -237,6 +240,8 @@ io.on('connection', (socket) => {
             // Broadcast updates
             io.emit('playerUpdate', target);
             io.emit('playerUpdate', attacker);
+        } else {
+            console.log('Target or attacker not found:', { target: !!target, attacker: !!attacker });
         }
     });
 

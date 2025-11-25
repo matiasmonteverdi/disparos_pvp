@@ -12,10 +12,22 @@ export class Game {
     private networkManager: NetworkManager;
     private localPlayer: Player | null = null;
     private otherPlayerMeshes: Map<string, THREE.Mesh> = new Map();
+    private otherPlayerNameLabels: Map<string, HTMLDivElement> = new Map();
     private lastTime: number = 0;
     private running: boolean = false;
     private collisionMap: boolean[][] = [];
     private playerName: string;
+    private projectiles: Array<{
+        mesh: THREE.Mesh;
+        velocity: THREE.Vector3;
+        damage: number;
+        playerId: string;
+        weaponId: string;
+        startTime: number;
+    }> = [];
+
+    private lastNetworkUpdate: number = 0;
+    private readonly NETWORK_UPDATE_RATE: number = 30; // ms (approx 33Hz)
 
     constructor(canvas: HTMLCanvasElement, playerName: string) {
         this.playerName = playerName;
@@ -42,28 +54,28 @@ export class Game {
                 }
             }
         });
+
+        // Handle projectile sync from other players
+        this.networkManager.onShoot((data) => {
+            this.createProjectileEffect(data);
+        });
     }
 
     public async start(): Promise<void> {
         console.log('Starting game...');
 
-        // Connect to server
         try {
             await this.networkManager.connect();
             console.log('Connected to server');
         } catch (error) {
             console.error('Failed to connect to server:', error);
-            throw error; // Re-throw to handle in main.ts
+            throw error;
         }
 
-        // Join game with player name
         this.networkManager.joinGame(this.playerName);
-
-        // Load map
         this.renderer.loadMap(DM_MAP_1);
         this.collisionMap = getCollisionMap(DM_MAP_1);
 
-        // Create local player
         const spawn = getRandomSpawnPoint(DM_MAP_1);
         this.localPlayer = new Player(
             this.networkManager.getPlayerId(),
@@ -72,7 +84,6 @@ export class Game {
             spawn.z
         );
 
-        // Start game loop
         this.running = true;
         this.lastTime = performance.now();
         this.gameLoop();
@@ -82,7 +93,7 @@ export class Game {
         if (!this.running) return;
 
         const currentTime = performance.now();
-        const deltaTime = (currentTime - this.lastTime) / 1000; // Convert to seconds
+        const deltaTime = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
 
         this.update(deltaTime);
@@ -94,16 +105,13 @@ export class Game {
     private update(deltaTime: number): void {
         if (!this.localPlayer) return;
 
-        // Get input
         const input = this.inputManager.getInput();
         const mouseDelta = this.inputManager.getMouseDelta();
 
-        // Apply mouse look
         if (this.inputManager.isPointerLockedState()) {
             this.localPlayer.state.angle -= mouseDelta.x * 0.002;
         }
 
-        // Handle weapon switching
         if (input.weaponSlot !== null) {
             const weaponKeys = Object.keys(WEAPONS);
             if (input.weaponSlot > 0 && input.weaponSlot <= weaponKeys.length) {
@@ -112,7 +120,6 @@ export class Game {
             }
         }
 
-        // Handle shooting
         if (input.shoot) {
             const weapon = Object.values(WEAPONS).find(w => w.id === this.localPlayer!.state.currentWeapon);
             if (weapon && this.localPlayer.canShoot(weapon)) {
@@ -126,31 +133,265 @@ export class Game {
                         z: this.localPlayer.state.position.z,
                     }
                 );
-                // Handle hitscan/projectile logic
+
                 if (weapon.type === 'hitscan' || weapon.type === 'melee') {
                     this.checkHitscan(weapon);
+                    this.renderer.showMuzzleFlash();
+                } else if (weapon.type === 'projectile') {
+                    this.createProjectile(weapon);
                 }
             }
         }
 
-        // Update player
         this.localPlayer.setInput(input);
         this.localPlayer.update(deltaTime, this.collisionMap);
 
-        // Send state to server
-        this.networkManager.sendPlayerState(this.localPlayer.state);
+        // Throttle network updates
+        const now = Date.now();
+        if (now - this.lastNetworkUpdate > this.NETWORK_UPDATE_RATE) {
+            this.networkManager.sendPlayerState(this.localPlayer.state);
+            this.lastNetworkUpdate = now;
+        }
 
-        // Update other players
-        this.updateOtherPlayers();
+        this.updateOtherPlayers(deltaTime);
+        this.updateProjectiles(deltaTime);
+        this.updateNameLabels();
+    }
+
+    private createProjectile(weapon: any): void {
+        if (!this.localPlayer) return;
+
+        const direction = new THREE.Vector3(
+            -Math.sin(this.localPlayer.state.angle),
+            0,
+            -Math.cos(this.localPlayer.state.angle)
+        );
+
+        let color = 0xffaa00;
+        let size = 0.3;
+
+        if (weapon.id === 'plasma') {
+            color = 0x00ff00;
+            size = 0.4;
+        } else if (weapon.id === 'bfg') {
+            color = 0x00ff00;
+            size = 0.8;
+        } else if (weapon.id === 'rocket') {
+            color = 0xff4400;
+            size = 0.5;
+        }
+
+        const geometry = new THREE.SphereGeometry(size, 8, 8);
+        const material = new THREE.MeshStandardMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 1
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+
+        mesh.position.copy(this.localPlayer.state.position);
+        mesh.position.y = this.localPlayer.state.position.y;
+
+        const light = new THREE.PointLight(color, 2, 50);
+        mesh.add(light);
+
+        this.renderer.getScene().add(mesh);
+
+        this.projectiles.push({
+            mesh: mesh,
+            velocity: direction.multiplyScalar(weapon.projectileSpeed),
+            damage: weapon.damage,
+            playerId: this.localPlayer.state.id,
+            weaponId: weapon.id,
+            startTime: Date.now()
+        });
+    }
+
+    private createProjectileEffect(data: any): void {
+        const weapon = Object.values(WEAPONS).find(w => w.id === data.weaponId) as any;
+        if (!weapon || weapon.type !== 'projectile') return;
+
+        const direction = new THREE.Vector3(
+            -Math.sin(data.angle),
+            0,
+            -Math.cos(data.angle)
+        );
+
+        let color = 0xffaa00;
+        let size = 0.3;
+
+        if (weapon.id === 'plasma') {
+            color = 0x00ff00;
+            size = 0.4;
+        } else if (weapon.id === 'bfg') {
+            color = 0x00ff00;
+            size = 0.8;
+        } else if (weapon.id === 'rocket') {
+            color = 0xff4400;
+            size = 0.5;
+        }
+
+        const geometry = new THREE.SphereGeometry(size, 8, 8);
+        const material = new THREE.MeshStandardMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 1
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+
+        mesh.position.set(data.position.x, data.position.y, data.position.z);
+
+        const light = new THREE.PointLight(color, 2, 50);
+        mesh.add(light);
+
+        this.renderer.getScene().add(mesh);
+
+        this.projectiles.push({
+            mesh: mesh,
+            velocity: direction.multiplyScalar(weapon.projectileSpeed),
+            damage: weapon.damage,
+            playerId: data.playerId,
+            weaponId: weapon.id,
+            startTime: Date.now()
+        });
+    }
+
+    private updateProjectiles(deltaTime: number): void {
+        const now = Date.now();
+
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const proj = this.projectiles[i];
+
+            // Remove old projectiles (5 seconds max lifetime)
+            if (now - proj.startTime > 5000) {
+                this.renderer.getScene().remove(proj.mesh);
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+
+            // Update position
+            proj.mesh.position.add(proj.velocity.clone().multiplyScalar(deltaTime));
+
+            // Check collision with walls
+            const cellSize = 64;
+            const gridX = Math.floor(proj.mesh.position.x / cellSize);
+            const gridZ = Math.floor(proj.mesh.position.z / cellSize);
+
+            if (
+                gridZ < 0 || gridZ >= this.collisionMap.length ||
+                gridX < 0 || gridX >= this.collisionMap[0].length ||
+                this.collisionMap[gridZ][gridX]
+            ) {
+                this.createExplosion(proj.mesh.position, proj.weaponId);
+                if (proj.playerId === this.localPlayer?.state.id) {
+                    this.applySplashDamage(proj.mesh.position, proj.weaponId);
+                }
+                this.renderer.getScene().remove(proj.mesh);
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+
+            // Check collision with players
+            if (proj.playerId === this.localPlayer?.state.id) {
+                // Check hits on other players
+                for (const [id, mesh] of this.otherPlayerMeshes.entries()) {
+                    const distance = proj.mesh.position.distanceTo(mesh.position);
+                    if (distance < 2) {
+                        this.networkManager.sendHit(id, proj.damage);
+                        this.createExplosion(proj.mesh.position, proj.weaponId);
+                        this.applySplashDamage(proj.mesh.position, proj.weaponId, id);
+                        this.renderer.getScene().remove(proj.mesh);
+                        this.projectiles.splice(i, 1);
+                        break;
+                    }
+                }
+            } else if (this.localPlayer) {
+                // Check if projectile hits local player
+                const distance = proj.mesh.position.distanceTo(this.localPlayer.state.position);
+                if (distance < 2) {
+                    this.createExplosion(proj.mesh.position, proj.weaponId);
+                    this.renderer.getScene().remove(proj.mesh);
+                    this.projectiles.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    private applySplashDamage(position: THREE.Vector3, weaponId: string, directHitId?: string): void {
+        const weapon = Object.values(WEAPONS).find(w => w.id === weaponId) as any;
+        if (!weapon || !weapon.splashRadius) return;
+
+        // Check other players
+        this.otherPlayerMeshes.forEach((mesh, playerId) => {
+            if (playerId === directHitId) return; // Skip direct hit victim (already took damage)
+
+            const distance = position.distanceTo(mesh.position);
+            if (distance < weapon.splashRadius) {
+                const damage = Math.floor(weapon.damage * (1 - distance / weapon.splashRadius));
+                if (damage > 0) {
+                    this.networkManager.sendHit(playerId, damage);
+                }
+            }
+        });
+
+        // Check local player (self damage)
+        if (this.localPlayer && this.localPlayer.state.id !== directHitId) {
+            const distance = position.distanceTo(this.localPlayer.state.position);
+            if (distance < weapon.splashRadius) {
+                const damage = Math.floor(weapon.damage * (1 - distance / weapon.splashRadius));
+                if (damage > 0) {
+                    this.networkManager.sendHit(this.localPlayer.state.id, damage);
+                }
+            }
+        }
+    }
+
+    private createExplosion(position: THREE.Vector3, weaponId: string): void {
+        let color = 0xff4400;
+        let size = 2;
+
+        if (weaponId === 'bfg') {
+            color = 0x00ff00;
+            size = 5;
+        } else if (weaponId === 'plasma') {
+            color = 0x00ff00;
+            size = 1.5;
+        }
+
+        const geometry = new THREE.SphereGeometry(size, 16, 16);
+        const material = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.8
+        });
+        const explosion = new THREE.Mesh(geometry, material);
+        explosion.position.copy(position);
+
+        const light = new THREE.PointLight(color, 5, 100);
+        light.position.copy(position);
+
+        this.renderer.getScene().add(explosion);
+        this.renderer.getScene().add(light);
+
+        let scale = 1;
+        const interval = setInterval(() => {
+            scale += 0.3;
+            explosion.scale.set(scale, scale, scale);
+            material.opacity -= 0.1;
+            light.intensity -= 0.5;
+
+            if (material.opacity <= 0) {
+                this.renderer.getScene().remove(explosion);
+                this.renderer.getScene().remove(light);
+                clearInterval(interval);
+            }
+        }, 50);
     }
 
     private checkHitscan(weapon: any): void {
         if (!this.localPlayer) return;
 
-        // Visual effects
         this.renderer.showMuzzleFlash();
-
-        // Simple recoil (push angle slightly)
         this.localPlayer.state.angle += (Math.random() - 0.5) * 0.02;
 
         const shots = weapon.pellets || 1;
@@ -159,7 +400,6 @@ export class Game {
         for (let i = 0; i < shots; i++) {
             const raycaster = new THREE.Raycaster();
 
-            // Fix direction to match player forward vector (-sin, -cos)
             const direction = new THREE.Vector3(
                 -Math.sin(this.localPlayer.state.angle),
                 0,
@@ -201,15 +441,76 @@ export class Game {
                 if (targetId) {
                     console.log('Hit player:', targetId, 'Damage:', damagePerShot);
                     this.networkManager.sendHit(targetId, damagePerShot);
+                    this.createBloodEffect(intersects[0].point);
                 }
             }
+
+            // Create bullet tracer for visual feedback
+            if (weapon.type === 'hitscan') {
+                const endPoint = intersects.length > 0 ?
+                    intersects[0].point :
+                    this.localPlayer.state.position.clone().add(direction.multiplyScalar(weapon.range));
+
+                this.createBulletTracer(
+                    this.localPlayer.state.position.clone(),
+                    endPoint
+                );
+            }
         }
+    }
+
+    private createBulletTracer(start: THREE.Vector3, end: THREE.Vector3): void {
+        // Validate vectors to prevent NaN errors
+        if (!start || !end ||
+            isNaN(start.x) || isNaN(start.y) || isNaN(start.z) ||
+            isNaN(end.x) || isNaN(end.y) || isNaN(end.z)) {
+            console.warn('Invalid vector values in createBulletTracer, skipping');
+            return;
+        }
+
+        const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+        const material = new THREE.LineBasicMaterial({
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.6
+        });
+        const line = new THREE.Line(geometry, material);
+
+        this.renderer.getScene().add(line);
+
+        setTimeout(() => {
+            this.renderer.getScene().remove(line);
+        }, 50);
+    }
+
+    private createBloodEffect(position: THREE.Vector3): void {
+        const geometry = new THREE.SphereGeometry(0.3, 8, 8);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            transparent: true,
+            opacity: 0.8
+        });
+        const blood = new THREE.Mesh(geometry, material);
+        blood.position.copy(position);
+
+        this.renderer.getScene().add(blood);
+
+        let scale = 1;
+        const interval = setInterval(() => {
+            scale += 0.2;
+            blood.scale.set(scale, scale, scale);
+            material.opacity -= 0.1;
+
+            if (material.opacity <= 0) {
+                this.renderer.getScene().remove(blood);
+                clearInterval(interval);
+            }
+        }, 50);
     }
 
     private render(): void {
         if (!this.localPlayer) return;
 
-        // Update camera
         this.renderer.updateCamera(
             this.localPlayer.state.position.x,
             this.localPlayer.state.position.y,
@@ -217,21 +518,23 @@ export class Game {
             this.localPlayer.state.angle
         );
 
-        // Render scene
         this.renderer.render();
     }
 
     private onPlayerJoin(player: NetworkPlayer): void {
         console.log('Player joined:', player.id, player.state.name);
 
-        // Create mesh for other player
         const geometry = new THREE.CapsuleGeometry(
             PLAYER_CONFIG.RADIUS,
             PLAYER_CONFIG.HEIGHT,
             4,
             8
         );
-        const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            emissive: 0x440000,
+            emissiveIntensity: 0.3
+        });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(
             player.state.position.x,
@@ -241,6 +544,20 @@ export class Game {
 
         this.renderer.getScene().add(mesh);
         this.otherPlayerMeshes.set(player.id, mesh);
+
+        // Create name label
+        const nameLabel = document.createElement('div');
+        nameLabel.className = 'player-name-label';
+        nameLabel.textContent = `${player.state.name} (${Math.ceil(player.state.health)})`;
+        nameLabel.style.position = 'absolute';
+        nameLabel.style.color = '#fff';
+        nameLabel.style.fontSize = '12px';
+        nameLabel.style.fontFamily = "'Press Start 2P', monospace";
+        nameLabel.style.textShadow = '2px 2px 0 #000';
+        nameLabel.style.pointerEvents = 'none';
+        nameLabel.style.whiteSpace = 'nowrap';
+        document.body.appendChild(nameLabel);
+        this.otherPlayerNameLabels.set(player.id, nameLabel);
     }
 
     private onPlayerLeave(playerId: string): void {
@@ -251,34 +568,141 @@ export class Game {
             this.renderer.getScene().remove(mesh);
             this.otherPlayerMeshes.delete(playerId);
         }
-    }
 
-    private onPlayerUpdate(player: NetworkPlayer): void {
-        const mesh = this.otherPlayerMeshes.get(player.id);
-        if (mesh) {
-            mesh.position.set(
-                player.state.position.x,
-                player.state.position.y,
-                player.state.position.z
-            );
-            mesh.rotation.y = player.state.angle;
+        const label = this.otherPlayerNameLabels.get(playerId);
+        if (label) {
+            label.remove();
+            this.otherPlayerNameLabels.delete(playerId);
         }
     }
 
-    private updateOtherPlayers(): void {
+    private onPlayerUpdate(player: NetworkPlayer): void {
+        // Update health display
+        const label = this.otherPlayerNameLabels.get(player.id);
+        if (label) {
+            label.textContent = `${player.state.name} (${Math.ceil(player.state.health)})`;
+            if (player.state.health < 50) {
+                label.style.color = '#f00';
+            } else {
+                label.style.color = '#fff';
+            }
+        }
+    }
+
+    private updateOtherPlayers(deltaTime: number): void {
         const otherPlayers = this.networkManager.getOtherPlayers();
+        const now = Date.now();
+        const INTERPOLATION_PERIOD = 100; // ms - how long to interpolate between states
+
         otherPlayers.forEach((player, id) => {
             const mesh = this.otherPlayerMeshes.get(id);
-            if (mesh) {
-                // Simple interpolation for smooth movement
-                mesh.position.lerp(
-                    new THREE.Vector3(
-                        player.state.position.x,
-                        player.state.position.y,
-                        player.state.position.z
-                    ),
-                    0.3
+            if (!mesh) return;
+
+            // If we have interpolation data
+            if (player.previousState && player.targetState && player.lastUpdateTime) {
+                const timeSinceUpdate = now - player.lastUpdateTime;
+
+                if (timeSinceUpdate < INTERPOLATION_PERIOD) {
+                    // Interpolate between previous and target state
+                    const t = timeSinceUpdate / INTERPOLATION_PERIOD;
+                    // Use hermite interpolation for smoother movement
+                    const smoothT = t * t * (3 - 2 * t);
+
+                    // Interpolate position
+                    const prevPos = player.previousState.position;
+                    const targetPos = player.targetState.position;
+                    mesh.position.x = prevPos.x + (targetPos.x - prevPos.x) * smoothT;
+                    mesh.position.y = prevPos.y + (targetPos.y - prevPos.y) * smoothT;
+                    mesh.position.z = prevPos.z + (targetPos.z - prevPos.z) * smoothT;
+
+                    // Interpolate rotation (handle angle wrapping)
+                    let prevAngle = player.previousState.angle;
+                    let targetAngle = player.targetState.angle;
+                    let angleDiff = targetAngle - prevAngle;
+
+                    // Normalize angle difference to [-PI, PI]
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+                    mesh.rotation.y = prevAngle + angleDiff * smoothT;
+
+                    // Update current state for rendering
+                    player.state.position.x = mesh.position.x;
+                    player.state.position.y = mesh.position.y;
+                    player.state.position.z = mesh.position.z;
+                    player.state.angle = mesh.rotation.y;
+                } else {
+                    // Interpolation period ended, apply dead reckoning
+                    // Predict movement based on last known velocity
+                    const extraTime = (timeSinceUpdate - INTERPOLATION_PERIOD) / 1000;
+
+                    if (player.targetState) {
+                        // Calculate velocity from last two states
+                        if (player.previousState) {
+                            const dx = player.targetState.position.x - player.previousState.position.x;
+                            const dz = player.targetState.position.z - player.previousState.position.z;
+                            const dt = INTERPOLATION_PERIOD / 1000;
+
+                            // Apply predicted movement (with damping to avoid going too far)
+                            const damping = Math.exp(-extraTime * 2); // Exponential decay
+                            mesh.position.x = player.targetState.position.x + (dx / dt) * extraTime * damping;
+                            mesh.position.z = player.targetState.position.z + (dz / dt) * extraTime * damping;
+                            mesh.position.y = player.targetState.position.y;
+                            mesh.rotation.y = player.targetState.angle;
+                        } else {
+                            // No previous state, just use target
+                            mesh.position.set(
+                                player.targetState.position.x,
+                                player.targetState.position.y,
+                                player.targetState.position.z
+                            );
+                            mesh.rotation.y = player.targetState.angle;
+                        }
+
+                        // Update current state
+                        player.state.position.x = mesh.position.x;
+                        player.state.position.y = mesh.position.y;
+                        player.state.position.z = mesh.position.z;
+                        player.state.angle = mesh.rotation.y;
+                    }
+                }
+            } else {
+                // No interpolation data, just use current state
+                mesh.position.set(
+                    player.state.position.x,
+                    player.state.position.y,
+                    player.state.position.z
                 );
+                mesh.rotation.y = player.state.angle;
+            }
+        });
+    }
+
+    private updateNameLabels(): void {
+        if (!this.localPlayer) return;
+
+        const camera = this.renderer.getCamera();
+        const canvas = this.renderer.getCanvas();
+
+        this.otherPlayerNameLabels.forEach((label, playerId) => {
+            const mesh = this.otherPlayerMeshes.get(playerId);
+            if (!mesh) return;
+
+            const position = mesh.position.clone();
+            position.y += PLAYER_CONFIG.HEIGHT + 20;
+
+            position.project(camera);
+
+            const x = (position.x * 0.5 + 0.5) * canvas.clientWidth;
+            const y = (position.y * -0.5 + 0.5) * canvas.clientHeight;
+
+            if (position.z < 1) {
+                label.style.display = 'block';
+                label.style.left = `${x}px`;
+                label.style.top = `${y}px`;
+                label.style.transform = 'translate(-50%, -50%)';
+            } else {
+                label.style.display = 'none';
             }
         });
     }
@@ -304,5 +728,9 @@ export class Game {
         this.networkManager.disconnect();
         this.renderer.dispose();
         this.inputManager.dispose();
+
+        // Clean up name labels
+        this.otherPlayerNameLabels.forEach(label => label.remove());
+        this.otherPlayerNameLabels.clear();
     }
 }

@@ -53,7 +53,7 @@ app.innerHTML = `
     <!-- Chat -->
     <div id="chat-container">
       <div id="chat-messages"></div>
-      <input type="text" id="chat-input" placeholder="Press T to chat..." maxlength="200" />
+      <input type="text" id="chat-input" placeholder="Type your message..." maxlength="200" />
       <div id="chat-hint">Press T to chat, ESC to close</div>
     </div>
     
@@ -61,19 +61,20 @@ app.innerHTML = `
     <div id="name-screen">
       <h1>DOOM PvP</h1>
       <div id="name-form">
-        <label for="player-name">Enter Your Name:</label>
+        <label for="player-name">ENTER YOUR NAME:</label>
         <input type="text" id="player-name" maxlength="20" placeholder="Player" autocomplete="off" />
         <button id="join-button">JOIN GAME</button>
         <div id="server-status"></div>
       </div>
       <div id="controls-info">
-        <h3>Controls:</h3>
+        <h3>CONTROLS</h3>
         <ul>
           <li>WASD - Move</li>
-          <li>Mouse - Look</li>
+          <li>Mouse - Look Around</li>
           <li>Left Click / Space - Shoot</li>
-          <li>1-7 - Switch Weapons</li>
-          <li>T - Chat</li>
+          <li>1-9 - Switch Weapons</li>
+          <li>T - Open Chat</li>
+          <li>ESC - Close Chat</li>
         </ul>
       </div>
     </div>
@@ -96,10 +97,8 @@ const playerCountValue = document.querySelector<HTMLSpanElement>('#player-count-
 let game: Game | null = null;
 let chatManager: ChatManager | null = null;
 
-// Focus on name input
 playerNameInput.focus();
 
-// Handle Enter key on name input
 playerNameInput.addEventListener('keydown', (e) => {
   if (e.code === 'Enter') {
     e.preventDefault();
@@ -107,7 +106,6 @@ playerNameInput.addEventListener('keydown', (e) => {
   }
 });
 
-// Start game on join button click
 joinButton.addEventListener('click', async () => {
   const playerName = playerNameInput.value.trim() || 'Player';
 
@@ -125,37 +123,36 @@ joinButton.addEventListener('click', async () => {
     game = new Game(canvas, playerName);
     await game.start();
 
-    // Hide name screen, show HUD
     nameScreen.style.display = 'none';
     hud.style.display = 'block';
 
-    // Initialize chat
     chatManager = new ChatManager();
     chatManager.onSend((message) => {
       game?.sendChatMessage(message);
     });
 
-    // Setup chat message handler
     game.onChatMessage((message: ChatMessage) => {
       chatManager?.addMessage(message);
     });
 
-    // Setup player count handler
     game.onPlayerCount((count: number) => {
       playerCountValue.textContent = `${count}/8`;
     });
 
-    // Update HUD loop
+    // Update HUD
+    let lastHealth = 100;
     setInterval(() => {
       if (game) {
         const player = game.getLocalPlayer();
         if (player) {
-          healthValue.textContent = Math.floor(player.state.health).toString();
+          const currentHealth = Math.floor(player.state.health);
+          healthValue.textContent = currentHealth.toString();
           armorValue.textContent = Math.floor(player.state.armor).toString();
-          weaponName.textContent = player.state.currentWeapon.toUpperCase();
-          scoreValue.textContent = player.state.kills.toString();
 
-          // Update ammo display
+          const currentWeaponName = player.state.currentWeapon.toUpperCase().replace('_', ' ');
+          weaponName.textContent = currentWeaponName;
+          scoreValue.textContent = `${player.state.kills}/${player.state.deaths}`;
+
           const currentWeapon = player.state.currentWeapon;
           const weaponData = Object.values(WEAPONS).find(w => w.id === currentWeapon);
           if (weaponData && weaponData.ammoType) {
@@ -164,12 +161,21 @@ joinButton.addEventListener('click', async () => {
             ammoValue.textContent = '∞';
           }
 
-          // Low health warning
-          if (player.state.health < 25) {
+          // Low health effect
+          if (currentHealth < 25) {
             hud.classList.add('low-health');
           } else {
             hud.classList.remove('low-health');
           }
+
+          // Health change feedback
+          if (currentHealth < lastHealth) {
+            healthValue.style.color = '#f00';
+            setTimeout(() => {
+              healthValue.style.color = '#0f0';
+            }, 200);
+          }
+          lastHealth = currentHealth;
         }
       }
     }, 100);
@@ -182,7 +188,6 @@ joinButton.addEventListener('click', async () => {
   }
 });
 
-// Handle page unload
 window.addEventListener('beforeunload', () => {
   if (game) {
     game.stop();

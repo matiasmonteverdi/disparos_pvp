@@ -104,6 +104,19 @@ export class Renderer {
         this.camera.rotation.y = angle;
     }
 
+    public getCamera(): THREE.PerspectiveCamera {
+        return this.camera;
+    }
+
+    public getCanvas(): HTMLCanvasElement {
+        return this.renderer.domElement;
+    }
+
+    public dispose(): void {
+        this.renderer.dispose();
+        window.removeEventListener('resize', () => this.onResize());
+    }
+
     public render(): void {
         this.renderer.render(this.scene, this.camera);
     }
@@ -133,10 +146,5 @@ export class Renderer {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    public dispose(): void {
-        this.renderer.dispose();
-        window.removeEventListener('resize', () => this.onResize());
     }
 }

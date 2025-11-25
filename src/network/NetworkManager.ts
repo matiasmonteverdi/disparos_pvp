@@ -5,6 +5,10 @@ import type { PlayerInput, PlayerState } from '../entities/Player';
 export interface NetworkPlayer {
     id: string;
     state: PlayerState;
+    previousState?: PlayerState;
+    targetState?: PlayerState;
+    lastUpdateTime?: number;
+    interpolationProgress?: number;
 }
 
 export interface ChatMessage {
@@ -86,7 +90,12 @@ export class NetworkManager {
                 } else {
                     const player = this.otherPlayers.get(playerState.id);
                     if (player) {
-                        player.state = playerState;
+                        // Store previous state for interpolation
+                        player.previousState = { ...player.state };
+                        player.targetState = playerState;
+                        player.lastUpdateTime = Date.now();
+                        player.interpolationProgress = 0;
+
                         if (this.onPlayerUpdateCallback) {
                             this.onPlayerUpdateCallback(player);
                         }
