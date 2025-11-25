@@ -112,6 +112,23 @@ export class Renderer {
         return this.scene;
     }
 
+    public showMuzzleFlash(): void {
+        // Create a point light at the camera position
+        const flash = new THREE.PointLight(0xffffaa, 2, 100);
+        flash.position.copy(this.camera.position);
+        // Move it slightly forward
+        const direction = new THREE.Vector3();
+        this.camera.getWorldDirection(direction);
+        flash.position.add(direction.multiplyScalar(1));
+
+        this.scene.add(flash);
+
+        // Remove after 50ms
+        setTimeout(() => {
+            this.scene.remove(flash);
+        }, 50);
+    }
+
     private onResize(): void {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();

@@ -147,15 +147,23 @@ export class Game {
     private checkHitscan(weapon: any): void {
         if (!this.localPlayer) return;
 
+        // Visual effects
+        this.renderer.showMuzzleFlash();
+
+        // Simple recoil (push angle slightly)
+        this.localPlayer.state.angle += (Math.random() - 0.5) * 0.02;
+
         const shots = weapon.pellets || 1;
         const damagePerShot = weapon.damage;
 
         for (let i = 0; i < shots; i++) {
             const raycaster = new THREE.Raycaster();
+
+            // Fix direction to match player forward vector (-sin, -cos)
             const direction = new THREE.Vector3(
-                Math.sin(this.localPlayer.state.angle),
+                -Math.sin(this.localPlayer.state.angle),
                 0,
-                Math.cos(this.localPlayer.state.angle)
+                -Math.cos(this.localPlayer.state.angle)
             );
 
             if (weapon.spread) {
@@ -191,6 +199,7 @@ export class Game {
                 }
 
                 if (targetId) {
+                    console.log('Hit player:', targetId, 'Damage:', damagePerShot);
                     this.networkManager.sendHit(targetId, damagePerShot);
                 }
             }
