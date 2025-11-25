@@ -1,0 +1,240 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Press Start 2P', monospace;
+  background: #000;
+  overflow: hidden;
+  cursor: none;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+}
+
+#game-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* HUD Styles - DOOM Inspired */
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#hud-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 80px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 10px 20px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+#hud-left, #hud-right {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#hud-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-label {
+  font-size: 10px;
+  color: #888;
+  margin-right: 10px;
+}
+
+.hud-value {
+  font-size: 20px;
+  color: #0f0;
+}
+
+#health-value {
+  color: #0f0;
+}
+
+#armor-value {
+  color: #00f;
+}
+
+#ammo-value {
+  color: #ff0;
+}
+
+#score-value {
+  color: #f00;
+}
+
+.hud-weapon {
+  font-size: 16px;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+#health-display, #armor-display, #ammo-display, #score-display {
+  display: flex;
+  align-items: center;
+}
+
+/* Crosshair */
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+
+#crosshair::before,
+#crosshair::after {
+  content: '';
+  position: absolute;
+  background: #0f0;
+  box-shadow: 0 0 5px #0f0;
+}
+
+#crosshair::before {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+#crosshair::after {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+/* Start Menu */
+#start-menu {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1a0000 0%, #000000 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+#start-menu:hover {
+  background: linear-gradient(135deg, #2a0000 0%, #0a0a0a 100%);
+}
+
+#start-menu h1 {
+  font-size: 48px;
+  color: #f00;
+  text-shadow: 4px 4px 0 #000, 0 0 20px #f00;
+  margin-bottom: 20px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    text-shadow: 4px 4px 0 #000, 0 0 20px #f00;
+  }
+  50% {
+    text-shadow: 4px 4px 0 #000, 0 0 40px #f00, 0 0 60px #f00;
+  }
+}
+
+#start-menu p {
+  font-size: 16px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+#controls-info {
+  margin-top: 40px;
+  text-align: left;
+  color: #888;
+}
+
+#controls-info h3 {
+  font-size: 14px;
+  color: #fff;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+#controls-info ul {
+  list-style: none;
+  font-size: 10px;
+  line-height: 1.8;
+}
+
+#controls-info li {
+  margin-bottom: 5px;
+}
+
+/* Retro CRT Effect (Optional) */
+#game-canvas {
+  filter: contrast(1.1) brightness(1.05);
+}
+
+/* Low health warning */
+@keyframes redFlash {
+  0%, 100% {
+    background: transparent;
+  }
+  50% {
+    background: rgba(255, 0, 0, 0.2);
+  }
+}
+
+.low-health #hud {
+  animation: redFlash 1s infinite;
+}
