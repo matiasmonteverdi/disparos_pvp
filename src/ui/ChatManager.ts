@@ -1,9 +1,6 @@
-export interface ChatMessage {
-    playerId: string;
-    playerName: string;
-    message: string;
-    timestamp: number;
-}
+import type { ChatMessage } from '../network/NetworkManager';
+
+export type { ChatMessage };
 
 export class ChatManager {
     private messages: ChatMessage[] = [];
@@ -26,8 +23,11 @@ export class ChatManager {
         // Toggle chat with 'T' key
         document.addEventListener('keydown', (e) => {
             if (e.code === 'KeyT' && !this.isOpen) {
-                e.preventDefault();
-                this.open();
+                // Only open if not typing in another input (like name input)
+                if (document.activeElement?.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    this.open();
+                }
             } else if (e.code === 'Escape' && this.isOpen) {
                 e.preventDefault();
                 this.close();
@@ -55,6 +55,8 @@ export class ChatManager {
         this.isOpen = true;
         this.chatContainer.classList.add('chat-open');
         this.chatInput.focus();
+        // Scroll to bottom when opening to see history
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
 
     public close(): void {
@@ -76,46 +78,70 @@ export class ChatManager {
     public addMessage(chatMessage: ChatMessage): void {
         this.messages.push(chatMessage);
 
-        // Limit message history
+        // Limit message history in memory
         if (this.messages.length > this.maxMessages) {
             this.messages.shift();
         }
 
-        this.renderMessages();
-    }
+        // Create and append element
+        const element = this.createMessageElement(chatMessage);
+        this.chatMessages.appendChild(element);
 
-    private renderMessages(): void {
-        // Clear existing messages
-        this.chatMessages.innerHTML = '';
-
-        // Show last 10 messages
-        const recentMessages = this.messages.slice(-10);
-
-        recentMessages.forEach((msg) => {
-            const messageElement = document.createElement('div');
-            messageElement.className = 'chat-message';
-
-            if (msg.playerId === 'system') {
-                messageElement.classList.add('system-message');
-                messageElement.textContent = msg.message;
-            } else {
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'chat-name';
-                nameSpan.textContent = `${msg.playerName}: `;
-
-                const textSpan = document.createElement('span');
-                textSpan.className = 'chat-text';
-                textSpan.textContent = msg.message;
-
-                messageElement.appendChild(nameSpan);
-                messageElement.appendChild(textSpan);
+        // Limit DOM elements
+        while (this.chatMessages.children.length > this.maxMessages) {
+            if (this.chatMessages.firstChild) {
+                this.chatMessages.removeChild(this.chatMessages.firstChild);
             }
-
-            this.chatMessages.appendChild(messageElement);
-        });
+        }
 
         // Auto-scroll to bottom
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+
+        // Fade out after 5 seconds
+        // We use a timeout to add the class. 
+        // If chat is open, CSS will keep it partially visible.
+        // If chat is closed, CSS will hide it.
+        setTimeout(() => {
+            if (element.isConnected) {
+                element.classList.add('faded');
+            }
+        }, 5000);
+    }
+
+    private createMessageElement(msg: ChatMessage): HTMLElement {
+        const div = document.createElement('div');
+        div.className = 'chat-message';
+
+        // Timestamp
+        const time = new Date(msg.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' });
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'chat-timestamp';
+        timeSpan.textContent = `[${time}]`;
+        div.appendChild(timeSpan);
+
+        if (msg.type === 'system') {
+            div.classList.add('system-message');
+            const text = document.createElement('span');
+            text.textContent = msg.message;
+            div.appendChild(text);
+        } else if (msg.type === 'kill') {
+            div.classList.add('kill-message');
+            const text = document.createElement('span');
+            text.textContent = msg.message;
+            div.appendChild(text);
+        } else {
+            const name = document.createElement('span');
+            name.className = 'chat-name';
+            name.textContent = `${msg.playerName}: `;
+            div.appendChild(name);
+
+            const text = document.createElement('span');
+            text.className = 'chat-text';
+            text.textContent = msg.message;
+            div.appendChild(text);
+        }
+
+        return div;
     }
 
     public onSend(callback: (message: string) => void): void {

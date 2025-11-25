@@ -53,6 +53,7 @@ interface ChatMessage {
     playerName: string;
     message: string;
     timestamp: number;
+    type?: 'chat' | 'system' | 'kill';
 }
 
 const players: Map<string, PlayerState> = new Map();
@@ -125,6 +126,7 @@ io.on('connection', (socket) => {
             playerName: 'System',
             message: `${playerName} joined the game`,
             timestamp: Date.now(),
+            type: 'system',
         };
         io.emit('chatMessage', joinMessage);
 
@@ -141,6 +143,7 @@ io.on('connection', (socket) => {
                 playerName: player.name,
                 message: message.trim().substring(0, 200), // Limit message length
                 timestamp: Date.now(),
+                type: 'chat',
             };
             io.emit('chatMessage', chatMessage);
         }
@@ -211,6 +214,7 @@ io.on('connection', (socket) => {
                     playerName: 'System',
                     message: `${target.name} was fragged by ${attacker.name}`,
                     timestamp: Date.now(),
+                    type: 'kill',
                 };
                 io.emit('chatMessage', killMessage);
 
@@ -248,6 +252,7 @@ io.on('connection', (socket) => {
                 playerName: 'System',
                 message: `${player.name} left the game`,
                 timestamp: Date.now(),
+                type: 'system',
             };
             io.emit('chatMessage', leaveMessage);
 

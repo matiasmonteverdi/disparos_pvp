@@ -12,6 +12,7 @@ export interface ChatMessage {
     playerName: string;
     message: string;
     timestamp: number;
+    type?: 'chat' | 'system' | 'kill';
 }
 
 export class NetworkManager {
