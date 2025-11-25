@@ -2,9 +2,29 @@
 
 Un juego de disparos multijugador online inspirado en DOOM 1993, con énfasis en combate PvP rápido y frenético.
 
-## 🎮 Características
+## ✨ Nuevas Características
 
-### Jugabilidad Core
+### 🎮 Sistema de Chat
+- Presiona **T** para abrir el chat
+- Escribe tu mensaje y presiona **Enter** para enviar
+- Presiona **ESC** para cerrar el chat
+- Mensajes del sistema para jugadores que se unen/salen
+- Historial de hasta 50 mensajes
+
+### 👤 Sistema de Nombres
+- Pantalla de entrada de nombre al iniciar
+- Nombres personalizados para cada jugador
+- Validación de nombres (mínimo 2 caracteres)
+- Máximo 20 caracteres por nombre
+
+### 👥 Límite de Jugadores
+- **Máximo 8 jugadores** por servidor
+- Contador de jugadores en tiempo real (esquina superior derecha)
+- Mensaje de "servidor lleno" si se excede el límite
+
+## 🎮 Características Core
+
+### Jugabilidad
 - **Movimiento Rápido**: Movimiento acelerado estilo DOOM clásico (strafe running)
 - **Sin ADS**: No hay apuntar con mira - acción pura y directa
 - **Combate Mixto**: Armas hitscan (daño instantáneo) y proyectiles
@@ -25,12 +45,7 @@ Un juego de disparos multijugador online inspirado en DOOM 1993, con énfasis en
 - **Invisibilidad** - Camuflaje parcial
 - **Quad Damage** - Multiplicador de daño x4
 
-### Modos de Juego
-- **Deathmatch** - Todos contra todos
-- **Team Deathmatch** - Equipos competitivos
-- **Duelo 1v1** - Combate directo
-
-## 🚀 Instalación
+## 🚀 Instalación y Ejecución
 
 ### Requisitos
 - Node.js 18+
@@ -40,8 +55,8 @@ Un juego de disparos multijugador online inspirado en DOOM 1993, con énfasis en
 
 1. **Clonar el repositorio**
 ```bash
-git clone <repository-url>
-cd disparos_online
+git clone https://github.com/matiasmonteverdi/disparos_pvp.git
+cd disparos_pvp
 ```
 
 2. **Instalar dependencias**
@@ -49,12 +64,12 @@ cd disparos_online
 npm install
 ```
 
-3. **Iniciar el servidor**
+3. **Iniciar el servidor** (Terminal 1)
 ```bash
 npm run server
 ```
 
-4. **Iniciar el cliente** (en otra terminal)
+4. **Iniciar el cliente** (Terminal 2)
 ```bash
 npm run dev
 ```
@@ -64,12 +79,19 @@ npm run dev
 http://localhost:5173
 ```
 
+6. **Unirse al juego**
+- Ingresa tu nombre (2-20 caracteres)
+- Haz clic en "JOIN GAME"
+- ¡Empieza a jugar!
+
 ## 🎯 Controles
 
 - **WASD** - Movimiento
-- **Mouse** - Mirar/Apuntar
+- **Mouse** - Mirar/Apuntar (click para activar pointer lock)
 - **Click Izquierdo / Espacio** - Disparar
 - **1-7** - Cambiar armas
+- **T** - Abrir chat
+- **ESC** - Cerrar chat
 - **Flechas Izquierda/Derecha** - Girar (alternativa al mouse)
 
 ## 🏗️ Arquitectura del Proyecto
@@ -89,6 +111,8 @@ disparos_online/
 │   │   └── NetworkManager.ts # Comunicación multijugador
 │   ├── renderer/
 │   │   └── Renderer.ts        # Renderizado 3D con Three.js
+│   ├── ui/
+│   │   └── ChatManager.ts    # Sistema de chat
 │   ├── world/
 │   │   └── Map.ts             # Mapas y niveles
 │   ├── main.ts                # Punto de entrada
@@ -109,7 +133,7 @@ disparos_online/
 
 - **Gráficos**: Low-poly 3D con estética retro
 - **HUD**: Interfaz estilo DOOM clásico
-- **Efectos**: Gore pixelado y efectos de sangre
+- **Chat**: Sistema de mensajería en tiempo real
 - **Paleta**: Colores inspirados en la paleta original de DOOM
 
 ## 📝 Configuración
@@ -119,6 +143,7 @@ disparos_online/
 Edita `server/index.ts`:
 ```typescript
 const PORT = process.env.PORT || 3001;
+const MAX_PLAYERS = 8; // Cambiar límite de jugadores
 ```
 
 Y `src/config/constants.ts`:
@@ -138,74 +163,53 @@ export const PLAYER_CONFIG = {
 };
 ```
 
-### Añadir nuevas armas
+## 🌐 Multijugador
 
-1. Define el arma en `src/config/constants.ts`:
-```typescript
-export const WEAPONS = {
-  // ...
-  NEW_WEAPON: {
-    id: 'new_weapon',
-    name: 'New Weapon',
-    damage: 50,
-    fireRate: 500,
-    ammoType: 'bullets',
-    ammoPerShot: 1,
-    type: 'hitscan',
-  },
-};
-```
+### Características de Red
+- **Límite de jugadores**: 8 jugadores máximo
+- **Sincronización en tiempo real**: 60 ticks por segundo
+- **Chat en tiempo real**: Mensajes instantáneos entre jugadores
+- **Contador de jugadores**: Muestra cuántos jugadores están conectados
+- **Mensajes del sistema**: Notificaciones cuando jugadores se unen/salen
 
-2. Añade la lógica de disparo en `src/core/Game.ts`
-
-## 🗺️ Crear Nuevos Mapas
-
-Edita `src/world/Map.ts`:
-
-```typescript
-export const NEW_MAP: MapData = {
-  name: 'My Map',
-  width: 20,
-  height: 20,
-  cells: [],
-  spawns: [
-    { x: 3 * 64 + 32, z: 3 * 64 + 32 },
-    // Más puntos de spawn...
-  ],
-  pickups: [
-    { x: 5 * 64 + 32, z: 5 * 64 + 32, type: 'health_large' },
-    // Más pickups...
-  ],
-  weapons: [
-    { x: 10 * 64 + 32, z: 10 * 64 + 32, type: 'shotgun' },
-    // Más armas...
-  ],
-};
-```
+### Eventos de Red
+- `joinGame`: Unirse al juego con nombre
+- `playerUpdate`: Actualización de estado del jugador
+- `playerShoot`: Evento de disparo
+- `chatMessage`: Mensaje de chat
+- `playerCount`: Actualización del contador de jugadores
+- `serverFull`: Servidor lleno (rechaza conexión)
 
 ## 🐛 Debugging
 
 ### El servidor no inicia
-- Verifica que el puerto no esté en uso
-- Revisa los logs en la consola
+- Verifica que el puerto 3001 no esté en uso
+- Revisa los logs en la consola del servidor
 
 ### El cliente no se conecta
 - Asegúrate de que el servidor esté corriendo
 - Verifica que las URLs coincidan en cliente y servidor
 - Revisa la consola del navegador para errores
 
-### Lag o stuttering
-- Ajusta `TICK_RATE` en `src/config/constants.ts`
-- Reduce `INTERPOLATION_DELAY` para menos lag (más jitter)
-- Aumenta `INTERPOLATION_DELAY` para más suavidad (más lag)
+### "Server is full"
+- El servidor tiene un límite de 8 jugadores
+- Espera a que un jugador se desconecte
+- O cambia `MAX_PLAYERS` en `server/index.ts`
+
+### El chat no funciona
+- Asegúrate de presionar **T** para abrir el chat
+- Verifica que el servidor esté recibiendo mensajes (logs)
+- Revisa la consola del navegador para errores
 
 ## 🚧 Próximas Características
 
+- [x] Sistema de chat
+- [x] Nombres de jugadores
+- [x] Límite de 8 jugadores
 - [ ] Implementar lógica de hitscan completa
 - [ ] Añadir proyectiles visuales
 - [ ] Sistema de respawn
-- [ ] Scoreboard
-- [ ] Chat de texto
+- [ ] Scoreboard completo
 - [ ] Efectos de sonido
 - [ ] Más mapas
 - [ ] Autoridad del servidor (anti-cheat)
@@ -233,3 +237,14 @@ Inspirado en DOOM (1993) de id Software.
 ---
 
 **¡Disfruta del juego!** 🎮💀
+
+## 📸 Screenshots
+
+### Pantalla de Nombre
+![Name Screen](docs/name-screen.png)
+
+### Juego en Acción
+![Gameplay](docs/gameplay.png)
+
+### Sistema de Chat
+![Chat System](docs/chat.png)
