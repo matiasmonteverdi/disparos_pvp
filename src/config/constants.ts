@@ -1,5 +1,7 @@
 // Game Constants - DOOM 1993 Style PvP
 
+import type { WeaponConfig, AmmoConfig } from '../../shared/types/weapon.types';
+
 // World Configuration
 export const WORLD_CONFIG = {
     CELL_SIZE: 64,
@@ -22,7 +24,7 @@ export const PLAYER_CONFIG = {
 };
 
 // Weapon Configuration - 9 WEAPONS TOTAL
-export const WEAPONS = {
+export const WEAPONS: Record<string, WeaponConfig> = {
     FISTS: {
         id: 'fists',
         name: 'Fists',
