@@ -28,6 +28,25 @@ export interface LeaderboardEntry {
     ping: number;
 }
 
+export interface ItemSpawn {
+    id: string;
+    type: 'health' | 'armor' | 'ammo';
+    position: { x: number; y: number; z: number };
+    value: number;
+}
+
+export type GameStatus = 'waiting' | 'warmup' | 'playing' | 'ended';
+
+export interface GameState {
+    status: GameStatus;
+    timeRemaining: number;
+    scores: {
+        red: number;
+        blue: number;
+    };
+    winningTeam?: 'red' | 'blue' | 'draw';
+}
+
 export class NetworkManager {
     private socket: Socket | null = null;
     private connected: boolean = false;
@@ -42,6 +61,12 @@ export class NetworkManager {
     private onPlayerCountCallback?: (count: number) => void;
     private onLeaderboardCallback?: (leaderboard: LeaderboardEntry[]) => void;
     private onPingUpdateCallback?: (ping: number) => void;
+    // New callbacks for reconnection events
+    private onReconnectingCallback?: (attempt: number) => void;
+    private onReconnectedCallback?: () => void;
+    private onItemSpawnCallback?: (item: ItemSpawn) => void;
+    private onItemCollectedCallback?: (itemId: string, playerId: string) => void;
+    private onGameStateUpdateCallback?: (state: GameState) => void;
 
     private ping: number = 0;
     private reconnectAttempts: number = 0;
@@ -78,11 +103,19 @@ export class NetworkManager {
                 console.log(`🔄 Reconnection attempt ${attemptNumber}/${this.maxReconnectAttempts}`);
                 this.reconnecting = true;
                 this.reconnectAttempts = attemptNumber;
+                // Notify UI about reconnection attempt
+                if (this.onReconnectingCallback) {
+                    this.onReconnectingCallback(attemptNumber);
+                }
             });
 
             this.socket.on('reconnect', (attemptNumber) => {
                 console.log(`✅ Reconnected after ${attemptNumber} attempts`);
                 this.reconnecting = false;
+                // Notify UI that reconnection succeeded
+                if (this.onReconnectedCallback) {
+                    this.onReconnectedCallback();
+                }
             });
 
             this.socket.on('reconnect_failed', () => {
@@ -197,6 +230,24 @@ export class NetworkManager {
                     this.onLeaderboardCallback(leaderboard);
                 }
             });
+
+            this.socket.on('itemSpawn', (item: ItemSpawn) => {
+                if (this.onItemSpawnCallback) {
+                    this.onItemSpawnCallback(item);
+                }
+            });
+
+            this.socket.on('itemCollected', (data: { itemId: string, playerId: string }) => {
+                if (this.onItemCollectedCallback) {
+                    this.onItemCollectedCallback(data.itemId, data.playerId);
+                }
+            });
+
+            this.socket.on('gameStateUpdate', (state: GameState) => {
+                if (this.onGameStateUpdateCallback) {
+                    this.onGameStateUpdateCallback(state);
+                }
+            });
         });
     }
 
@@ -285,8 +336,30 @@ export class NetworkManager {
         this.onLeaderboardCallback = callback;
     }
 
+    // Register callback for reconnection attempts
+    public onReconnecting(callback: (attempt: number) => void): void {
+        this.onReconnectingCallback = callback;
+    }
+
+    // Register callback for successful reconnection
+    public onReconnected(callback: () => void): void {
+        this.onReconnectedCallback = callback;
+    }
+
     public onPingUpdate(callback: (ping: number) => void): void {
         this.onPingUpdateCallback = callback;
+    }
+
+    public onItemSpawn(callback: (item: ItemSpawn) => void): void {
+        this.onItemSpawnCallback = callback;
+    }
+
+    public onItemCollected(callback: (itemId: string, playerId: string) => void): void {
+        this.onItemCollectedCallback = callback;
+    }
+
+    public onGameStateUpdate(callback: (state: GameState) => void): void {
+        this.onGameStateUpdateCallback = callback;
     }
 
     public getOtherPlayers(): Map<string, NetworkPlayer> {

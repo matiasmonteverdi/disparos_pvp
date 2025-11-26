@@ -1,18 +1,21 @@
 import { Player } from '../entities/Player';
 import { Renderer } from '../renderer/Renderer';
 import { InputManager } from '../input/InputManager';
-import { NetworkManager, type NetworkPlayer, type ChatMessage } from '../network/NetworkManager';
+import { NetworkManager, type NetworkPlayer, type ChatMessage, type LeaderboardEntry, type ItemSpawn } from '../network/NetworkManager';
 import { DM_MAP_1, getCollisionMap, getRandomSpawnPoint } from '../world/Map';
 import { WEAPONS, PLAYER_CONFIG } from '../config/constants';
 import * as THREE from 'three';
+import { UIManager } from '../ui/UIManager';
 
 export class Game {
+    private uiManager: UIManager;
     private renderer: Renderer;
     private inputManager: InputManager;
     private networkManager: NetworkManager;
     private localPlayer: Player | null = null;
     private otherPlayerMeshes: Map<string, THREE.Mesh> = new Map();
     private otherPlayerNameLabels: Map<string, HTMLDivElement> = new Map();
+    private items: Map<string, THREE.Mesh> = new Map();
     private lastTime: number = 0;
     private running: boolean = false;
     private collisionMap: boolean[][] = [];
@@ -34,6 +37,7 @@ export class Game {
         this.renderer = new Renderer(canvas);
         this.inputManager = new InputManager(canvas);
         this.networkManager = new NetworkManager();
+        this.uiManager = new UIManager();
 
         // Setup network callbacks
         this.networkManager.onPlayerJoin((player) => this.onPlayerJoin(player));
@@ -46,18 +50,64 @@ export class Game {
                 this.localPlayer.state.kills = state.kills;
                 this.localPlayer.state.deaths = state.deaths;
                 this.localPlayer.state.ammo = state.ammo;
+                this.localPlayer.state.team = state.team;
+                this.localPlayer.state.ping = state.ping;
 
-                // Handle respawn/teleport
-                const serverPos = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
-                if (serverPos.distanceTo(this.localPlayer.state.position) > 100) {
-                    this.localPlayer.state.position.copy(serverPos);
+                if (state.position) {
+                    const serverPos = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
+                    if (serverPos.distanceTo(this.localPlayer.state.position) > 100) {
+                        console.warn('Position corrected by server');
+                        this.localPlayer.state.position.copy(serverPos);
+                    }
                 }
             }
+        });
+
+        this.networkManager.onPingUpdate((ping) => {
+            this.uiManager.updatePing(ping);
+        });
+
+        this.networkManager.onLeaderboard((leaderboard: LeaderboardEntry[]) => {
+            this.uiManager.updateLeaderboard(leaderboard);
         });
 
         // Handle projectile sync from other players
         this.networkManager.onShoot((data) => {
             this.createProjectileEffect(data);
+        });
+
+        this.networkManager.onReconnecting((attempt) => {
+            this.uiManager.showReconnecting(attempt);
+        });
+
+        this.networkManager.onReconnected(() => {
+            this.uiManager.hideReconnecting();
+        });
+
+        // Chat integration
+        this.networkManager.onChatMessage((message: ChatMessage) => {
+            this.uiManager.addChatMessage(message);
+        });
+
+        this.uiManager.onMessageSend((message: string) => {
+            this.networkManager.sendChatMessage(message);
+        });
+
+        // Item synchronization
+        this.networkManager.onItemSpawn((item) => {
+            this.createItem(item);
+        });
+
+        this.networkManager.onItemCollected((itemId, playerId) => {
+            this.removeItem(itemId);
+            if (playerId === this.localPlayer?.state.id) {
+                console.log('You collected an item!');
+            }
+        });
+
+        // Game State integration
+        this.networkManager.onGameStateUpdate((state) => {
+            this.uiManager.updateGameState(state);
         });
     }
 
@@ -73,6 +123,8 @@ export class Game {
         }
 
         this.networkManager.joinGame(this.playerName);
+        this.uiManager.setCurrentPlayerId(this.networkManager.getPlayerId());
+
         this.renderer.loadMap(DM_MAP_1);
         this.collisionMap = getCollisionMap(DM_MAP_1);
 
@@ -104,6 +156,11 @@ export class Game {
 
     private update(deltaTime: number): void {
         if (!this.localPlayer) return;
+
+        // Block input if chat is open
+        if (this.uiManager.isChatOpen()) {
+            return;
+        }
 
         const input = this.inputManager.getInput();
         const mouseDelta = this.inputManager.getMouseDelta();
@@ -548,9 +605,15 @@ export class Game {
         // Create name label
         const nameLabel = document.createElement('div');
         nameLabel.className = 'player-name-label';
+
+        if (player.state.team === 'red') {
+            nameLabel.classList.add('red-team');
+        } else if (player.state.team === 'blue') {
+            nameLabel.classList.add('blue-team');
+        }
+
         nameLabel.textContent = `${player.state.name} (${Math.ceil(player.state.health)})`;
         nameLabel.style.position = 'absolute';
-        nameLabel.style.color = '#fff';
         nameLabel.style.fontSize = '12px';
         nameLabel.style.fontFamily = "'Press Start 2P', monospace";
         nameLabel.style.textShadow = '2px 2px 0 #000';
@@ -732,5 +795,51 @@ export class Game {
         // Clean up name labels
         this.otherPlayerNameLabels.forEach(label => label.remove());
         this.otherPlayerNameLabels.clear();
+    }
+
+    private createItem(item: ItemSpawn): void {
+        if (this.items.has(item.id)) return;
+
+        let color = 0xffffff;
+        let size = 0.5;
+
+        switch (item.type) {
+            case 'health':
+                color = 0x00ff00; // Green
+                break;
+            case 'armor':
+                color = 0x0000ff; // Blue
+                break;
+            case 'ammo':
+                color = 0xffff00; // Yellow
+                size = 0.3;
+                break;
+        }
+
+        const geometry = new THREE.BoxGeometry(size, size, size);
+        const material = new THREE.MeshStandardMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 0.5,
+            roughness: 0.4,
+            metalness: 0.6
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+
+        mesh.position.set(item.position.x, item.position.y, item.position.z);
+
+        // Float animation setup (handled in updateItems if we had one, or simple CSS-like animation here?)
+        // For now static, maybe add rotation in render loop if we tracked them better
+
+        this.renderer.getScene().add(mesh);
+        this.items.set(item.id, mesh);
+    }
+
+    private removeItem(itemId: string): void {
+        const mesh = this.items.get(itemId);
+        if (mesh) {
+            this.renderer.getScene().remove(mesh);
+            this.items.delete(itemId);
+        }
     }
 }
