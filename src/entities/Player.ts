@@ -1,40 +1,9 @@
 import * as THREE from 'three';
 import { PLAYER_CONFIG } from '../config/constants';
+import type { PlayerInput, PlayerState, PlayerPowerups } from '../../shared/types/player.types';
+import type { WeaponConfig } from '../../shared/types/weapon.types';
 
-export interface PlayerInput {
-    forward: boolean;
-    backward: boolean;
-    left: boolean;
-    right: boolean;
-    turnLeft: boolean;
-    turnRight: boolean;
-    shoot: boolean;
-    weaponSlot: number | null;
-}
-
-export interface PlayerState {
-    id: string;
-    name: string;
-    position: THREE.Vector3;
-    angle: number;
-    velocity: THREE.Vector3;
-    health: number;
-    armor: number;
-    currentWeapon: string;
-    ammo: Record<string, number>;
-    weapons: string[];
-    powerups: {
-        invuln?: number;
-        invis?: number;
-        quad?: number;
-    };
-    lastShootTime: number;
-    kills: number;
-    deaths: number;
-    team?: 'red' | 'blue';
-    ping?: number;
-    lastPingTime?: number;
-}
+export type { PlayerInput, PlayerState, PlayerPowerups };
 
 export class Player {
     public state: PlayerState;
@@ -189,13 +158,14 @@ export class Player {
     }
 
     public addAmmo(type: string, amount: number, max: number): boolean {
-        if (!this.state.ammo[type]) {
-            this.state.ammo[type] = 0;
+        const ammo = this.state.ammo as Record<string, number>;
+        if (!ammo[type]) {
+            ammo[type] = 0;
         }
-        if (this.state.ammo[type] >= max) {
+        if (ammo[type] >= max) {
             return false;
         }
-        this.state.ammo[type] = Math.min(this.state.ammo[type] + amount, max);
+        ammo[type] = Math.min(ammo[type] + amount, max);
         return true;
     }
 
@@ -215,7 +185,7 @@ export class Player {
         return false;
     }
 
-    public canShoot(weapon: any): boolean {
+    public canShoot(weapon: WeaponConfig): boolean {
         const now = Date.now();
         if (now - this.state.lastShootTime < weapon.fireRate) {
             return false;
@@ -226,7 +196,7 @@ export class Player {
         return true;
     }
 
-    public shoot(weapon: any): void {
+    public shoot(weapon: WeaponConfig): void {
         this.state.lastShootTime = Date.now();
         if (weapon.ammoType) {
             this.state.ammo[weapon.ammoType] -= weapon.ammoPerShot;
@@ -234,10 +204,10 @@ export class Player {
     }
 
     public respawn(x: number, z: number): void {
-        this.state.position.set(x, PLAYER_CONFIG.HEIGHT, z);
+        (this.state.position as THREE.Vector3).set(x, PLAYER_CONFIG.HEIGHT, z);
         this.state.health = PLAYER_CONFIG.SPAWN_HEALTH;
         this.state.armor = PLAYER_CONFIG.SPAWN_ARMOR;
-        this.state.velocity.set(0, 0, 0);
+        (this.state.velocity as THREE.Vector3).set(0, 0, 0);
         this.state.angle = 0;
         this.state.currentWeapon = 'pistol';
         this.state.ammo = {

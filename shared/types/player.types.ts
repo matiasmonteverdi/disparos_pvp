@@ -4,6 +4,7 @@
  */
 
 import type { AmmoRecord } from './weapon.types';
+import type * as THREE from 'three';
 
 export interface Vector3 {
     x: number;
@@ -31,13 +32,13 @@ export interface PlayerPowerups {
 export interface PlayerState {
     id: string;
     name: string;
-    position: Vector3;
+    position: THREE.Vector3 | Vector3;
     angle: number;
-    velocity: Vector3;
+    velocity: THREE.Vector3 | Vector3;
     health: number;
     armor: number;
     currentWeapon: string;
-    ammo: AmmoRecord;
+    ammo: AmmoRecord | Record<string, number>; // Allow both typed and dynamic ammo
     weapons: string[];
     powerups: PlayerPowerups;
     lastShootTime: number;
