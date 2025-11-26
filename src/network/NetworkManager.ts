@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
-import { NETWORK_CONFIG } from '../config/constants';
+import { NETWORK_CONFIG } from '../config/game';
 import type { PlayerInput, PlayerState } from '../entities/Player';
+import type { ShootData } from '../../shared/types/network.types';
 
 export interface NetworkPlayer {
     id: string;
@@ -56,7 +57,7 @@ export class NetworkManager {
     private onPlayerLeaveCallback?: (playerId: string) => void;
     private onPlayerUpdateCallback?: (player: NetworkPlayer) => void;
     private onLocalPlayerUpdateCallback?: (state: PlayerState) => void;
-    private onShootCallback?: (data: any) => void;
+    private onShootCallback?: (data: ShootData) => void;
     private onChatMessageCallback?: (message: ChatMessage) => void;
     private onPlayerCountCallback?: (count: number) => void;
     private onLeaderboardCallback?: (leaderboard: LeaderboardEntry[]) => void;
@@ -207,7 +208,7 @@ export class NetworkManager {
                 }
             });
 
-            this.socket.on('playerShoot', (data: any) => {
+            this.socket.on('playerShoot', (data: ShootData) => {
                 if (this.onShootCallback) {
                     this.onShootCallback(data);
                 }
@@ -320,7 +321,7 @@ export class NetworkManager {
         this.onLocalPlayerUpdateCallback = callback;
     }
 
-    public onShoot(callback: (data: any) => void): void {
+    public onShoot(callback: (data: ShootData) => void): void {
         this.onShootCallback = callback;
     }
 

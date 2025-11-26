@@ -27,7 +27,18 @@ export class UIManager {
     private timerElement: HTMLElement | null = null;
     private scoreRedElement: HTMLElement | null = null;
     private scoreBlueElement: HTMLElement | null = null;
+
     private gameOverScreen: HTMLElement | null = null;
+
+    // HUD Elements
+    private hudContainer: HTMLElement | null = null;
+    private healthValue: HTMLElement | null = null;
+    private armorValue: HTMLElement | null = null;
+    private ammoValue: HTMLElement | null = null;
+    private weaponName: HTMLElement | null = null;
+    private scoreValue: HTMLElement | null = null;
+    private playerCountValue: HTMLElement | null = null;
+    private crosshair: HTMLElement | null = null;
 
     constructor() {
         this.createUIElements();
@@ -118,6 +129,59 @@ export class UIManager {
             <div id="restart-countdown">New game starting soon...</div>
         `;
         document.body.appendChild(this.gameOverScreen);
+
+        // HUD
+        this.hudContainer = document.createElement('div');
+        this.hudContainer.id = 'hud';
+        this.hudContainer.style.display = 'none';
+        this.hudContainer.innerHTML = `
+            <div id="hud-bottom">
+                <div id="hud-left">
+                    <div id="health-display">
+                        <span class="hud-label">HEALTH</span>
+                        <span id="health-value" class="hud-value">100</span>
+                    </div>
+                    <div id="armor-display">
+                        <span class="hud-label">ARMOR</span>
+                        <span id="armor-value" class="hud-value">0</span>
+                    </div>
+                </div>
+                
+                <div id="hud-center">
+                    <div id="weapon-display">
+                        <span id="weapon-name" class="hud-weapon">PISTOL</span>
+                    </div>
+                </div>
+                
+                <div id="hud-right">
+                    <div id="ammo-display">
+                        <span class="hud-label">AMMO</span>
+                        <span id="ammo-value" class="hud-value">50</span>
+                    </div>
+                    <div id="score-display">
+                        <span class="hud-label">FRAGS</span>
+                        <span id="score-value" class="hud-value">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="player-count">
+                <span id="player-count-value">1/8</span> Players
+            </div>
+        `;
+        document.body.appendChild(this.hudContainer);
+
+        this.healthValue = this.hudContainer.querySelector('#health-value');
+        this.armorValue = this.hudContainer.querySelector('#armor-value');
+        this.ammoValue = this.hudContainer.querySelector('#ammo-value');
+        this.weaponName = this.hudContainer.querySelector('#weapon-name');
+        this.scoreValue = this.hudContainer.querySelector('#score-value');
+        this.playerCountValue = this.hudContainer.querySelector('#player-count-value');
+
+        // Crosshair
+        this.crosshair = document.createElement('div');
+        this.crosshair.id = 'crosshair';
+        document.body.appendChild(this.crosshair);
     }
 
     private setupEventListeners(): void {
@@ -293,6 +357,8 @@ export class UIManager {
         this.killFeedContainer?.remove();
         this.gameStateContainer?.remove();
         this.gameOverScreen?.remove();
+        this.hudContainer?.remove();
+        this.crosshair?.remove();
     }
 
     public updateGameState(state: GameState): void {
@@ -444,5 +510,63 @@ export class UIManager {
             entry.style.transition = 'opacity 0.5s';
             setTimeout(() => entry.remove(), 500);
         }, 5000);
+    }
+
+    public showHUD(): void {
+        if (this.hudContainer) this.hudContainer.style.display = 'block';
+        if (this.crosshair) this.crosshair.style.display = 'block';
+    }
+
+    public hideHUD(): void {
+        if (this.hudContainer) this.hudContainer.style.display = 'none';
+        if (this.crosshair) this.crosshair.style.display = 'none';
+    }
+
+    public updatePlayerCount(count: number): void {
+        if (this.playerCountValue) {
+            this.playerCountValue.textContent = `${count}/8`;
+        }
+    }
+
+    public updateHUD(playerState: any, weaponConfig: any): void {
+        if (!this.hudContainer) return;
+
+        // Health
+        if (this.healthValue) {
+            const currentHealth = Math.floor(playerState.health);
+            this.healthValue.textContent = currentHealth.toString();
+
+            if (currentHealth < 25) {
+                this.hudContainer.classList.add('low-health');
+                this.healthValue.style.color = '#f00';
+            } else {
+                this.hudContainer.classList.remove('low-health');
+                this.healthValue.style.color = '#0f0'; // Assuming default green
+            }
+        }
+
+        // Armor
+        if (this.armorValue) {
+            this.armorValue.textContent = Math.floor(playerState.armor).toString();
+        }
+
+        // Weapon
+        if (this.weaponName) {
+            this.weaponName.textContent = playerState.currentWeapon.toUpperCase().replace('_', ' ');
+        }
+
+        // Ammo
+        if (this.ammoValue) {
+            if (weaponConfig && weaponConfig.ammoType) {
+                this.ammoValue.textContent = (playerState.ammo[weaponConfig.ammoType] || 0).toString();
+            } else {
+                this.ammoValue.textContent = '∞';
+            }
+        }
+
+        // Score (Frags)
+        if (this.scoreValue) {
+            this.scoreValue.textContent = `${playerState.kills}/${playerState.deaths}`;
+        }
     }
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PLAYER_CONFIG } from '../config/constants';
+import { PLAYER_CONFIG } from '../config/game';
 import type { PlayerInput, PlayerState, PlayerPowerups } from '../../shared/types/player.types';
 import type { WeaponConfig } from '../../shared/types/weapon.types';
 

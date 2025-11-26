@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { MapData } from '../world/Map';
-import { WORLD_CONFIG, COLORS } from '../config/constants';
+import { WORLD_CONFIG, COLORS } from '../config/game';
 
 export class Renderer {
     private scene: THREE.Scene;

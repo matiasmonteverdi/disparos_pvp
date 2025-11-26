@@ -1,6 +1,8 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import type { PlayerState, PlayerInput, Vector3 } from '../shared/types/player.types';
+import type { ChatMessage, LeaderboardEntry, Item, ShootData } from '../shared/types/network.types';
 
 const app = express();
 const httpServer = createServer(app);
@@ -20,69 +22,7 @@ const TICK_INTERVAL = 1000 / TICK_RATE;
 const MAX_SPEED = 300; // Max units per second for anti-cheat
 const MAX_POSITION_DELTA = 50; // Max position change per update
 
-interface Vector3 {
-    x: number;
-    y: number;
-    z: number;
-}
 
-interface PlayerState {
-    id: string;
-    name: string;
-    position: Vector3;
-    angle: number;
-    velocity: Vector3;
-    health: number;
-    armor: number;
-    currentWeapon: string;
-    ammo: Record<string, number>;
-    weapons: string[];
-    powerups: Record<string, number>;
-    lastShootTime: number;
-    kills: number;
-    deaths: number;
-    team: 'red' | 'blue';
-    ping: number;
-    lastPingTime: number;
-}
-
-interface PlayerInput {
-    forward: boolean;
-    backward: boolean;
-    left: boolean;
-    right: boolean;
-    turnLeft: boolean;
-    turnRight: boolean;
-    shoot: boolean;
-    weaponSlot: number | null;
-}
-
-interface ChatMessage {
-    playerId: string;
-    playerName: string;
-    message: string;
-    timestamp: number;
-    type?: 'chat' | 'system' | 'kill' | 'team';
-}
-
-interface LeaderboardEntry {
-    id: string;
-    name: string;
-    kills: number;
-    deaths: number;
-    team: 'red' | 'blue';
-    ping: number;
-}
-
-interface Item {
-    id: string;
-    type: 'health' | 'armor' | 'ammo' | 'weapon';
-    subtype: string;
-    position: Vector3;
-    active: boolean;
-    respawnTime: number;
-    value: number;
-}
 
 const items: Map<string, Item> = new Map();
 
@@ -180,17 +120,17 @@ function checkItemCollection() {
 
                 if (item.type === 'health') {
                     if (player.health < 100 || (item.subtype === 'health_mega' && player.health < 200)) {
-                        player.health = Math.min(item.subtype === 'health_mega' ? 200 : 100, player.health + item.value);
+                        player.health = Math.min(item.subtype === 'health_mega' ? 200 : 100, player.health + (item.value || 0));
                         collected = true;
                     }
                 } else if (item.type === 'armor') {
                     if (player.armor < 200) {
-                        player.armor = Math.min(200, player.armor + item.value);
+                        player.armor = Math.min(200, player.armor + (item.value || 0));
                         collected = true;
                     }
                 } else if (item.type === 'weapon') {
-                    if (!player.weapons.includes(item.subtype)) {
-                        player.weapons.push(item.subtype);
+                    if (!player.weapons.includes(item.subtype || '')) {
+                        player.weapons.push(item.subtype || '');
                         collected = true;
                     }
                     // Add ammo logic here if needed
@@ -250,8 +190,8 @@ function getLeaderboard(): LeaderboardEntry[] {
             name: player.name,
             kills: player.kills,
             deaths: player.deaths,
-            team: player.team,
-            ping: player.ping
+            team: player.team || 'red',
+            ping: player.ping || 0
         });
     });
 
@@ -462,7 +402,7 @@ io.on('connection', (socket) => {
     });
 
     // Handle shooting with server validation
-    socket.on('playerShoot', (data: { weaponId: string; angle: number; position: Vector3 }) => {
+    socket.on('playerShoot', (data: Omit<ShootData, 'playerId'>) => {
         const player = players.get(socket.id);
         if (!player) return;
 

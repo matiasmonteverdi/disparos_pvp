@@ -6,6 +6,7 @@ import { DM_MAP_1, getCollisionMap, getRandomSpawnPoint } from '../world/Map';
 import { WEAPONS, PLAYER_CONFIG } from '../config/constants';
 import * as THREE from 'three';
 import { UIManager } from '../ui/UIManager';
+import { NETWORK_CONSTANTS, PROJECTILE_CONSTANTS, COLLISION_CONSTANTS } from '../config/constants';
 
 export class Game {
     private uiManager: UIManager;
