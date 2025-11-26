@@ -30,7 +30,7 @@ export interface LeaderboardEntry {
 
 export interface ItemSpawn {
     id: string;
-    type: 'health' | 'armor' | 'ammo';
+    type: 'health' | 'armor' | 'ammo' | 'weapon';
     position: { x: number; y: number; z: number };
     value: number;
 }
@@ -380,6 +380,10 @@ export class NetworkManager {
 
     public getPing(): number {
         return this.ping;
+    }
+
+    public getReconnectAttempts(): number {
+        return this.reconnectAttempts;
     }
 
     public disconnect(): void {

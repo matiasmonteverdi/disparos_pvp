@@ -74,6 +74,139 @@ interface LeaderboardEntry {
     ping: number;
 }
 
+interface Item {
+    id: string;
+    type: 'health' | 'armor' | 'ammo' | 'weapon';
+    subtype: string;
+    position: Vector3;
+    active: boolean;
+    respawnTime: number;
+    value: number;
+}
+
+const items: Map<string, Item> = new Map();
+
+function initializeItems() {
+    // Map data from DM_MAP_1
+    const pickups = [
+        { x: 5 * 64 + 32, z: 5 * 64 + 32, type: 'health_large' },
+        { x: 14 * 64 + 32, z: 5 * 64 + 32, type: 'health_large' },
+        { x: 5 * 64 + 32, z: 14 * 64 + 32, type: 'health_large' },
+        { x: 14 * 64 + 32, z: 14 * 64 + 32, type: 'health_large' },
+        { x: 10 * 64 + 32, z: 5 * 64 + 32, type: 'armor_large' },
+        { x: 10 * 64 + 32, z: 14 * 64 + 32, type: 'armor_large' },
+        { x: 7 * 64 + 32, z: 10 * 64 + 32, type: 'health_mega' },
+        { x: 12 * 64 + 32, z: 10 * 64 + 32, type: 'armor_small' },
+    ];
+
+    const weapons = [
+        { x: 3 * 64 + 32, z: 10 * 64 + 32, type: 'shotgun' },
+        { x: 16 * 64 + 32, z: 10 * 64 + 32, type: 'shotgun' },
+        { x: 10 * 64 + 32, z: 3 * 64 + 32, type: 'chaingun' },
+        { x: 10 * 64 + 32, z: 16 * 64 + 32, type: 'rocket' },
+    ];
+
+    let idCounter = 0;
+
+    pickups.forEach(p => {
+        const id = `item_${idCounter++}`;
+        let type: Item['type'] = 'health';
+        let value = 0;
+
+        if (p.type.includes('health')) {
+            type = 'health';
+            value = p.type === 'health_mega' ? 100 : (p.type === 'health_large' ? 25 : 10);
+        } else if (p.type.includes('armor')) {
+            type = 'armor';
+            value = p.type === 'armor_large' ? 100 : 25;
+        }
+
+        items.set(id, {
+            id,
+            type,
+            subtype: p.type,
+            position: { x: p.x, y: 16, z: p.z },
+            active: true,
+            respawnTime: 0,
+            value
+        });
+    });
+
+    weapons.forEach(w => {
+        const id = `item_${idCounter++}`;
+        items.set(id, {
+            id,
+            type: 'weapon',
+            subtype: w.type,
+            position: { x: w.x, y: 16, z: w.z },
+            active: true,
+            respawnTime: 0,
+            value: 1
+        });
+    });
+}
+
+initializeItems();
+
+function checkItemCollection() {
+    const now = Date.now();
+
+    // Respawn items
+    items.forEach(item => {
+        if (!item.active && now >= item.respawnTime) {
+            item.active = true;
+            io.emit('itemSpawn', {
+                id: item.id,
+                type: item.type,
+                position: item.position,
+                value: item.value
+            });
+        }
+    });
+
+    // Check collisions
+    players.forEach(player => {
+        if (player.health <= 0) return;
+
+        items.forEach(item => {
+            if (!item.active) return;
+
+            const dx = player.position.x - item.position.x;
+            const dz = player.position.z - item.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+
+            if (dist < 32) { // 32 units radius
+                let collected = false;
+
+                if (item.type === 'health') {
+                    if (player.health < 100 || (item.subtype === 'health_mega' && player.health < 200)) {
+                        player.health = Math.min(item.subtype === 'health_mega' ? 200 : 100, player.health + item.value);
+                        collected = true;
+                    }
+                } else if (item.type === 'armor') {
+                    if (player.armor < 200) {
+                        player.armor = Math.min(200, player.armor + item.value);
+                        collected = true;
+                    }
+                } else if (item.type === 'weapon') {
+                    if (!player.weapons.includes(item.subtype)) {
+                        player.weapons.push(item.subtype);
+                        collected = true;
+                    }
+                    // Add ammo logic here if needed
+                }
+
+                if (collected) {
+                    item.active = false;
+                    item.respawnTime = now + 30000; // 30 seconds respawn
+                    io.emit('itemCollected', { itemId: item.id, playerId: player.id });
+                    io.emit('playerUpdate', player);
+                }
+            }
+        });
+    });
+}
+
 const players: Map<string, PlayerState> = new Map();
 const playerPings: Map<string, { sentTime: number, rtt: number[] }> = new Map();
 
@@ -244,6 +377,18 @@ io.on('connection', (socket) => {
         // Send player count and leaderboard
         io.emit('playerCount', players.size);
         broadcastLeaderboard();
+
+        // Send active items
+        items.forEach(item => {
+            if (item.active) {
+                socket.emit('itemSpawn', {
+                    id: item.id,
+                    type: item.type,
+                    position: item.position,
+                    value: item.value
+                });
+            }
+        });
     });
 
     // Handle chat messages
@@ -463,6 +608,8 @@ setInterval(() => {
         broadcastLeaderboard();
         leaderboardUpdateCounter = 0;
     }
+
+    checkItemCollection();
 }, TICK_INTERVAL);
 
 httpServer.listen(PORT, () => {

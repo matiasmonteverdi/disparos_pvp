@@ -98,16 +98,8 @@ export class Game {
             this.createItem(item);
         });
 
-        this.networkManager.onItemCollected((itemId, playerId) => {
+        this.networkManager.onItemCollected((itemId) => {
             this.removeItem(itemId);
-            if (playerId === this.localPlayer?.state.id) {
-                console.log('You collected an item!');
-            }
-        });
-
-        // Game State integration
-        this.networkManager.onGameStateUpdate((state) => {
-            this.uiManager.updateGameState(state);
         });
     }
 
@@ -116,7 +108,6 @@ export class Game {
 
         try {
             await this.networkManager.connect();
-            console.log('Connected to server');
         } catch (error) {
             console.error('Failed to connect to server:', error);
             throw error;
@@ -210,7 +201,7 @@ export class Game {
             this.lastNetworkUpdate = now;
         }
 
-        this.updateOtherPlayers(deltaTime);
+        this.updateOtherPlayers();
         this.updateProjectiles(deltaTime);
         this.updateNameLabels();
     }
@@ -265,7 +256,7 @@ export class Game {
     }
 
     private createProjectileEffect(data: any): void {
-        const weapon = Object.values(WEAPONS).find(w => w.id === data.weaponId) as any;
+        const weapon = Object.values(WEAPONS).find(w => w.id === data.weaponId);
         if (!weapon || weapon.type !== 'projectile') return;
 
         const direction = new THREE.Vector3(
@@ -350,54 +341,34 @@ export class Game {
 
             // Check collision with players
             if (proj.playerId === this.localPlayer?.state.id) {
-                // Check hits on other players
-                for (const [id, mesh] of this.otherPlayerMeshes.entries()) {
-                    const distance = proj.mesh.position.distanceTo(mesh.position);
-                    if (distance < 2) {
-                        this.networkManager.sendHit(id, proj.damage);
+                const otherPlayers = this.networkManager.getOtherPlayers();
+                for (const [targetId, player] of otherPlayers) {
+                    const distance = proj.mesh.position.distanceTo(player.state.position);
+                    if (distance < PLAYER_CONFIG.RADIUS * 2) {
                         this.createExplosion(proj.mesh.position, proj.weaponId);
-                        this.applySplashDamage(proj.mesh.position, proj.weaponId, id);
+                        this.applySplashDamage(proj.mesh.position, proj.weaponId);
                         this.renderer.getScene().remove(proj.mesh);
                         this.projectiles.splice(i, 1);
                         break;
                     }
                 }
-            } else if (this.localPlayer) {
-                // Check if projectile hits local player
-                const distance = proj.mesh.position.distanceTo(this.localPlayer.state.position);
-                if (distance < 2) {
-                    this.createExplosion(proj.mesh.position, proj.weaponId);
-                    this.renderer.getScene().remove(proj.mesh);
-                    this.projectiles.splice(i, 1);
-                }
             }
         }
     }
 
-    private applySplashDamage(position: THREE.Vector3, weaponId: string, directHitId?: string): void {
-        const weapon = Object.values(WEAPONS).find(w => w.id === weaponId) as any;
+    private applySplashDamage(position: THREE.Vector3, weaponId: string): void {
+        const weapon = Object.values(WEAPONS).find(w => w.id === weaponId);
         if (!weapon || !weapon.splashRadius) return;
 
-        // Check other players
-        this.otherPlayerMeshes.forEach((mesh, playerId) => {
-            if (playerId === directHitId) return; // Skip direct hit victim (already took damage)
-
-            const distance = position.distanceTo(mesh.position);
+        const otherPlayers = this.networkManager.getOtherPlayers();
+        for (const [targetId, player] of otherPlayers) {
+            const distance = position.distanceTo(player.state.position);
             if (distance < weapon.splashRadius) {
-                const damage = Math.floor(weapon.damage * (1 - distance / weapon.splashRadius));
+                const damageRatio = 1 - (distance / weapon.splashRadius);
+                const damage = weapon.damage * damageRatio;
                 if (damage > 0) {
-                    this.networkManager.sendHit(playerId, damage);
-                }
-            }
-        });
-
-        // Check local player (self damage)
-        if (this.localPlayer && this.localPlayer.state.id !== directHitId) {
-            const distance = position.distanceTo(this.localPlayer.state.position);
-            if (distance < weapon.splashRadius) {
-                const damage = Math.floor(weapon.damage * (1 - distance / weapon.splashRadius));
-                if (damage > 0) {
-                    this.networkManager.sendHit(this.localPlayer.state.id, damage);
+                    this.networkManager.sendHit(targetId, damage);
+                    this.createBloodEffect(player.state.position);
                 }
             }
         }
@@ -448,55 +419,30 @@ export class Game {
     private checkHitscan(weapon: any): void {
         if (!this.localPlayer) return;
 
-        this.renderer.showMuzzleFlash();
-        this.localPlayer.state.angle += (Math.random() - 0.5) * 0.02;
+        const raycaster = new THREE.Raycaster();
+        const direction = new THREE.Vector3(
+            -Math.sin(this.localPlayer.state.angle),
+            0,
+            -Math.cos(this.localPlayer.state.angle)
+        );
 
-        const shots = weapon.pellets || 1;
-        const damagePerShot = weapon.damage;
+        raycaster.set(this.localPlayer.state.position, direction);
+        raycaster.far = weapon.range;
 
-        for (let i = 0; i < shots; i++) {
-            const raycaster = new THREE.Raycaster();
+        const otherPlayers = this.networkManager.getOtherPlayers();
+        const meshes: THREE.Mesh[] = [];
+        otherPlayers.forEach((player, id) => {
+            const mesh = this.otherPlayerMeshes.get(id);
+            if (mesh) meshes.push(mesh);
+        });
 
-            const direction = new THREE.Vector3(
-                -Math.sin(this.localPlayer.state.angle),
-                0,
-                -Math.cos(this.localPlayer.state.angle)
-            );
+        const intersects = raycaster.intersectObjects(meshes);
 
-            if (weapon.spread) {
-                direction.x += (Math.random() - 0.5) * weapon.spread;
-                direction.z += (Math.random() - 0.5) * weapon.spread;
-                direction.normalize();
-            }
-
-            raycaster.set(
-                new THREE.Vector3(
-                    this.localPlayer.state.position.x,
-                    this.localPlayer.state.position.y,
-                    this.localPlayer.state.position.z
-                ),
-                direction
-            );
-            raycaster.far = weapon.range;
-
-            const meshes: THREE.Object3D[] = [];
-            this.otherPlayerMeshes.forEach((mesh) => meshes.push(mesh));
-
-            const intersects = raycaster.intersectObjects(meshes);
-
-            if (intersects.length > 0) {
-                const hitMesh = intersects[0].object;
-                let targetId: string | null = null;
-
-                for (const [id, mesh] of this.otherPlayerMeshes.entries()) {
-                    if (mesh === hitMesh) {
-                        targetId = id;
-                        break;
-                    }
-                }
-
-                if (targetId) {
-                    console.log('Hit player:', targetId, 'Damage:', damagePerShot);
+        if (intersects.length > 0) {
+            const hitMesh = intersects[0].object as THREE.Mesh;
+            for (const [targetId, player] of otherPlayers) {
+                if (this.otherPlayerMeshes.get(targetId) === hitMesh) {
+                    const damagePerShot = weapon.damage / (weapon.pellets || 1);
                     this.networkManager.sendHit(targetId, damagePerShot);
                     this.createBloodEffect(intersects[0].point);
                 }
@@ -652,7 +598,7 @@ export class Game {
         }
     }
 
-    private updateOtherPlayers(deltaTime: number): void {
+    private updateOtherPlayers(): void {
         const otherPlayers = this.networkManager.getOtherPlayers();
         const now = Date.now();
         const INTERPOLATION_PERIOD = 100; // ms - how long to interpolate between states
@@ -814,6 +760,10 @@ export class Game {
                 color = 0xffff00; // Yellow
                 size = 0.3;
                 break;
+            case 'weapon':
+                color = 0xff0000; // Red
+                size = 0.4;
+                break;
         }
 
         const geometry = new THREE.BoxGeometry(size, size, size);
@@ -827,9 +777,6 @@ export class Game {
         const mesh = new THREE.Mesh(geometry, material);
 
         mesh.position.set(item.position.x, item.position.y, item.position.z);
-
-        // Float animation setup (handled in updateItems if we had one, or simple CSS-like animation here?)
-        // For now static, maybe add rotation in render loop if we tracked them better
 
         this.renderer.getScene().add(mesh);
         this.items.set(item.id, mesh);

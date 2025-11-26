@@ -1,8 +1,6 @@
-- [ ] Sonidos de dolor/muerte de otros jugadores.
 - [ ] Sonido de "Item Respawn" lejano.
 
 ## 5. Mejoras de Gameplay Online
-- [ ] **Espectador**: Si mueres, cámara libre o seguir a compañero hasta respawn.
 - [ ] **Interpolación Avanzada**: Suavizar aún más el movimiento de enemigos con "buffer" de estados.
 - [ ] **Predicción de Disparo**: Mostrar impacto inmediato en cliente (sangre/chispas) antes de confirmación del servidor (con rollback si falla).
 
