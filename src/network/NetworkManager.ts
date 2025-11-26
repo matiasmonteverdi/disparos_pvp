@@ -56,7 +56,7 @@ export class NetworkManager {
     private onPlayerJoinCallback?: (player: NetworkPlayer) => void;
     private onPlayerLeaveCallback?: (playerId: string) => void;
     private onPlayerUpdateCallback?: (player: NetworkPlayer) => void;
-    private onLocalPlayerUpdateCallback?: (state: PlayerState) => void;
+    private onLocalPlayerUpdateCallback?: (state: Partial<PlayerState>) => void;
     private onShootCallback?: (data: ShootData) => void;
     private onChatMessageCallback?: (message: ChatMessage) => void;
     private onPlayerCountCallback?: (count: number) => void;
@@ -156,7 +156,7 @@ export class NetworkManager {
                 console.warn('⚠️ Position corrected by server');
                 if (this.onLocalPlayerUpdateCallback) {
                     // Server is telling us our position was invalid
-                    this.onLocalPlayerUpdateCallback({ position } as any);
+                    this.onLocalPlayerUpdateCallback({ position });
                 }
             });
 
@@ -317,7 +317,7 @@ export class NetworkManager {
         this.onPlayerUpdateCallback = callback;
     }
 
-    public onLocalPlayerUpdate(callback: (state: PlayerState) => void): void {
+    public onLocalPlayerUpdate(callback: (state: Partial<PlayerState>) => void): void {
         this.onLocalPlayerUpdateCallback = callback;
     }
 

@@ -2,6 +2,8 @@ import { Player } from '../entities/Player';
 import { Renderer } from '../renderer/Renderer';
 import { InputManager } from '../input/InputManager';
 import { NetworkManager, type NetworkPlayer, type ChatMessage, type LeaderboardEntry, type ItemSpawn } from '../network/NetworkManager';
+import type { WeaponConfig } from '../../shared/types/weapon.types';
+import type { ShootData } from '../../shared/types/network.types';
 import { DM_MAP_1, getCollisionMap, getRandomSpawnPoint } from '../world/Map';
 import { WEAPONS } from '../config/weapons';
 import { PLAYER_CONFIG } from '../config/game';
@@ -47,19 +49,19 @@ export class Game {
         this.networkManager.onPlayerUpdate((player) => this.onPlayerUpdate(player));
         this.networkManager.onLocalPlayerUpdate((state) => {
             if (this.localPlayer) {
-                this.localPlayer.state.health = state.health;
-                this.localPlayer.state.armor = state.armor;
-                this.localPlayer.state.kills = state.kills;
-                this.localPlayer.state.deaths = state.deaths;
-                this.localPlayer.state.ammo = state.ammo;
-                this.localPlayer.state.team = state.team;
-                this.localPlayer.state.ping = state.ping;
+                if (state.health !== undefined) this.localPlayer.state.health = state.health;
+                if (state.armor !== undefined) this.localPlayer.state.armor = state.armor;
+                if (state.kills !== undefined) this.localPlayer.state.kills = state.kills;
+                if (state.deaths !== undefined) this.localPlayer.state.deaths = state.deaths;
+                if (state.ammo !== undefined) this.localPlayer.state.ammo = state.ammo;
+                if (state.team !== undefined) this.localPlayer.state.team = state.team;
+                if (state.ping !== undefined) this.localPlayer.state.ping = state.ping;
 
                 if (state.position) {
                     const serverPos = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
-                    if (serverPos.distanceTo(this.localPlayer.state.position) > 100) {
+                    if (serverPos.distanceTo(this.localPlayer.state.position as THREE.Vector3) > 100) {
                         console.warn('Position corrected by server');
-                        this.localPlayer.state.position.copy(serverPos);
+                        (this.localPlayer.state.position as THREE.Vector3).copy(serverPos);
                     }
                 }
             }
@@ -208,7 +210,7 @@ export class Game {
         this.updateNameLabels();
     }
 
-    private createProjectile(weapon: any): void {
+    private createProjectile(weapon: WeaponConfig): void {
         if (!this.localPlayer) return;
 
         const direction = new THREE.Vector3(
@@ -239,7 +241,7 @@ export class Game {
         });
         const mesh = new THREE.Mesh(geometry, material);
 
-        mesh.position.copy(this.localPlayer.state.position);
+        mesh.position.copy(this.localPlayer.state.position as THREE.Vector3);
         mesh.position.y = this.localPlayer.state.position.y;
 
         const light = new THREE.PointLight(color, 2, 50);
@@ -249,7 +251,7 @@ export class Game {
 
         this.projectiles.push({
             mesh: mesh,
-            velocity: direction.multiplyScalar(weapon.projectileSpeed),
+            velocity: direction.multiplyScalar(weapon.projectileSpeed || 0),
             damage: weapon.damage,
             playerId: this.localPlayer.state.id,
             weaponId: weapon.id,
@@ -257,7 +259,7 @@ export class Game {
         });
     }
 
-    private createProjectileEffect(data: any): void {
+    private createProjectileEffect(data: ShootData): void {
         const weapon = Object.values(WEAPONS).find(w => w.id === data.weaponId);
         if (!weapon || weapon.type !== 'projectile') return;
 
@@ -298,7 +300,7 @@ export class Game {
 
         this.projectiles.push({
             mesh: mesh,
-            velocity: direction.multiplyScalar(weapon.projectileSpeed),
+            velocity: direction.multiplyScalar(weapon.projectileSpeed || 0),
             damage: weapon.damage,
             playerId: data.playerId,
             weaponId: weapon.id,
@@ -345,7 +347,7 @@ export class Game {
             if (proj.playerId === this.localPlayer?.state.id) {
                 const otherPlayers = this.networkManager.getOtherPlayers();
                 for (const [targetId, player] of otherPlayers) {
-                    const distance = proj.mesh.position.distanceTo(player.state.position);
+                    const distance = proj.mesh.position.distanceTo(player.state.position as THREE.Vector3);
                     if (distance < PLAYER_CONFIG.RADIUS * 2) {
                         this.createExplosion(proj.mesh.position, proj.weaponId);
                         this.applySplashDamage(proj.mesh.position, proj.weaponId);
@@ -364,13 +366,13 @@ export class Game {
 
         const otherPlayers = this.networkManager.getOtherPlayers();
         for (const [targetId, player] of otherPlayers) {
-            const distance = position.distanceTo(player.state.position);
+            const distance = position.distanceTo(player.state.position as THREE.Vector3);
             if (distance < weapon.splashRadius) {
                 const damageRatio = 1 - (distance / weapon.splashRadius);
                 const damage = weapon.damage * damageRatio;
                 if (damage > 0) {
                     this.networkManager.sendHit(targetId, damage);
-                    this.createBloodEffect(player.state.position);
+                    this.createBloodEffect(player.state.position as THREE.Vector3);
                 }
             }
         }
@@ -418,7 +420,7 @@ export class Game {
         }, 50);
     }
 
-    private checkHitscan(weapon: any): void {
+    private checkHitscan(weapon: WeaponConfig): void {
         if (!this.localPlayer) return;
 
         const raycaster = new THREE.Raycaster();
@@ -428,8 +430,8 @@ export class Game {
             -Math.cos(this.localPlayer.state.angle)
         );
 
-        raycaster.set(this.localPlayer.state.position, direction);
-        raycaster.far = weapon.range;
+        raycaster.set(this.localPlayer.state.position as THREE.Vector3, direction);
+        raycaster.far = weapon.range || 1000;
 
         const otherPlayers = this.networkManager.getOtherPlayers();
         const meshes: THREE.Mesh[] = [];
@@ -454,10 +456,10 @@ export class Game {
             if (weapon.type === 'hitscan') {
                 const endPoint = intersects.length > 0 ?
                     intersects[0].point :
-                    this.localPlayer.state.position.clone().add(direction.multiplyScalar(weapon.range));
+                    (this.localPlayer.state.position as THREE.Vector3).clone().add(direction.multiplyScalar(weapon.range || 1000));
 
                 this.createBulletTracer(
-                    this.localPlayer.state.position.clone(),
+                    (this.localPlayer.state.position as THREE.Vector3).clone(),
                     endPoint
                 );
             }
